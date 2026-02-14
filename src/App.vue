@@ -3,17 +3,17 @@ import { useApp } from "./useApp";
 
 const {
   messages, input, loading,
-  settingsState, settingsContentVisible, apiKey, modelId, baseUrl,
+  settingsState, settingsContentVisible, apiKey, modelId, compactModelId, baseUrl,
   messagesEndRef, messagesContainerRef,
   settingsBtnRef, settingsPanelRef, settingsTitleRef,
   settingsBtnRect, settingsTitleRect,
-  memoState, memoContentVisible, memoRules,
+  memoState, memoContentVisible, memoRules, compacting, clearing, clearingHeight,
   memoBtnRef, memoPanelRef, memoTitleRef,
   memoBtnRect, memoTitleRect,
   openSettings, closeSettings,
   openMemo, closeMemo, addMemoRule, toggleMemoRule, removeMemoRule,
-  clearMessages, minimizeWindow, toggleMaximize, closeWindow,
-  highlightMarkdown, sendMessage,
+  clearMessages,
+  highlightMarkdown, sendMessage, regenerate, memoryCompact,
 } = useApp();
 </script>
 
@@ -24,6 +24,13 @@ const {
       <div class="header-actions">
         <button class="clear-btn" @click="clearMessages" :disabled="messages.length === 0">
           +
+        </button>
+        <button
+          class="compact-btn"
+          @click="memoryCompact"
+          :disabled="compacting || messages.length === 0"
+        >
+          {{ compacting ? 'Compacting...' : 'Compact' }}
         </button>
         <button
           ref="settingsBtnRef"
@@ -41,16 +48,11 @@ const {
         >
           Memo
         </button>
-        <div class="window-controls">
-          <button class="win-btn" @click="minimizeWindow">&#x2013;</button>
-          <button class="win-btn" @click="toggleMaximize">&#x25A1;</button>
-          <button class="win-btn win-close" @click="closeWindow">&#x2715;</button>
-        </div>
       </div>
     </header>
 
     <div ref="messagesContainerRef" class="messages-container">
-      <div v-if="messages.length === 0" class="empty-state">Start a conversation!</div>
+      <div v-if="messages.length === 0 && !clearing" class="empty-state">Start a conversation!</div>
       <div
         v-for="(msg, idx) in messages"
         :key="idx"
@@ -61,18 +63,21 @@ const {
       <div v-if="loading && messages[messages.length - 1]?.content === ''" class="message assistant">
         <div class="message-content loading">Thinking...</div>
       </div>
+      <div v-if="clearing" class="clearing-spacer" :style="{ height: clearingHeight + 'px' }">
+        <div class="empty-state">Start a conversation!</div>
+      </div>
       <div ref="messagesEndRef"></div>
     </div>
 
-    <form class="input-container" @submit.prevent="sendMessage">
+    <form class="input-container" @submit.prevent="input.trim() ? sendMessage() : regenerate()">
       <input
         type="text"
         v-model="input"
         placeholder="Type a message..."
         :disabled="loading"
       />
-      <button type="submit" :disabled="loading || !input.trim()">
-        Send
+      <button type="submit" :disabled="loading || (!input.trim() && (messages.length === 0 || messages[messages.length - 1]?.role !== 'assistant'))">
+        {{ input.trim() ? 'Send' : (messages.length > 0 && messages[messages.length - 1]?.role === 'assistant' ? 'Regen' : 'Send') }}
       </button>
     </form>
 
@@ -117,6 +122,14 @@ const {
             placeholder=""
           />
         </div>
+        <div class="form-group">
+          <label>Model ID for Compact</label>
+          <input
+            type="text"
+            v-model="compactModelId"
+            placeholder="(same as Model ID)"
+          />
+        </div>
       </div>
     </div>
 
@@ -158,7 +171,7 @@ const {
         <div class="memo-list">
           <div v-for="(rule, idx) in memoRules" :key="idx" class="memo-item">
             <div class="memo-item-header" @click="toggleMemoRule(idx)">
-              <span class="memo-item-title">{{ rule.description || 'Untitled rule' }}</span>
+              <span class="memo-item-title">{{ rule.title || 'Untitled item' }}</span>
               <div class="memo-item-actions">
                 <button class="memo-remove-btn" @click.stop="removeMemoRule(idx)">&times;</button>
                 <span class="memo-arrow" :class="{ 'memo-arrow-open': rule.expanded }">&#x25B8;</span>
@@ -168,7 +181,7 @@ const {
               <div class="memo-item-body">
                 <div class="form-group">
                   <label>Description</label>
-                  <input type="text" v-model="rule.description" placeholder="Enter description..." />
+                  <input type="text" v-model="rule.title" placeholder="Enter title..." />
                 </div>
                 <div class="form-group">
                   <label>Update Rule</label>

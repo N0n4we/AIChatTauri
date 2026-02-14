@@ -60,36 +60,6 @@
   align-items: center;
 }
 
-.window-controls {
-  display: flex;
-  gap: 2px;
-  margin-left: 8px;
-}
-
-.win-btn {
-  width: 32px;
-  height: 28px;
-  border: none;
-  background: transparent;
-  color: #888;
-  font-size: 0.875rem;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 4px;
-}
-
-.win-btn:hover {
-  background: #333;
-  color: #e0e0e0;
-}
-
-.win-close:hover {
-  background: #e44;
-  color: white;
-}
-
 .clear-btn {
   padding: 8px 12px;
   border: none;
@@ -110,6 +80,27 @@
   cursor: not-allowed;
 }
 
+.compact-btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  background: #444;
+  color: #e0e0e0;
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-family: inherit;
+  font-weight: bold;
+}
+
+.compact-btn:hover:not(:disabled) {
+  background: #555;
+}
+
+.compact-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .messages-container {
   flex: 1;
   overflow-y: auto;
@@ -123,6 +114,11 @@
 
 .messages-container::-webkit-scrollbar {
   display: none;
+}
+
+.clearing-spacer {
+  flex-shrink: 0;
+  padding-top: 20px;
 }
 
 .empty-state {
@@ -538,13 +534,13 @@
 }
 
 /* Memo Panel */
-.memo-panel .settings-content {
+.settings-panel .settings-content {
   height: 100%;
   overflow-y: auto;
   scrollbar-width: none;
 }
 
-.memo-panel .settings-content::-webkit-scrollbar {
+.settings-panel .settings-content::-webkit-scrollbar {
   display: none;
 }
 
