@@ -52,6 +52,8 @@ export function useApp() {
   const memoTitleRect = ref({ top: 0, left: 0, width: 0, height: 0 });
   const memos = ref<Memo[]>([]);
   const compacting = ref(false);
+  const compactProgress = ref(0);
+  const compactTotal = ref(0);
   const clearing = ref(false);
   const clearingHeight = ref(0);
 
@@ -541,6 +543,8 @@ export function useApp() {
   async function memoryCompact() {
     if (compacting.value || messages.value.length === 0) return;
     compacting.value = true;
+    compactProgress.value = 0;
+    compactTotal.value = memoRules.value.length;
 
     try {
       const chatHistory = messages.value.map(m => `${m.role}: ${m.content}`).join("\n");
@@ -566,9 +570,11 @@ Output ONLY the updated memo content as plain text (no JSON, no wrapping). If th
             [{ role: "user", content: prompt }],
             config,
           );
+          compactProgress.value++;
           return { title: rule.title, content: result.content.trim() };
         } catch (e) {
           console.error(`Memo "${rule.title}" failed:`, e);
+          compactProgress.value++;
           return { title: rule.title, content: existing?.content || "" };
         }
       });
@@ -603,7 +609,7 @@ Output ONLY the updated memo content as plain text (no JSON, no wrapping). If th
     messagesEndRef, messagesContainerRef, inputRef,
     settingsBtnRef, settingsPanelRef, settingsTitleRef,
     settingsBtnRect, settingsTitleRect,
-    memoState, memoContentVisible, memoRules, memos, compacting, clearing, clearingHeight,
+    memoState, memoContentVisible, memoRules, memos, compacting, compactProgress, compactTotal, clearing, clearingHeight,
     memoBtnRef, memoPanelRef, memoTitleRef,
     memoBtnRect, memoTitleRect,
     openSettings, closeSettings,

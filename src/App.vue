@@ -7,7 +7,7 @@ const {
   messagesEndRef, messagesContainerRef, inputRef,
   settingsBtnRef, settingsPanelRef, settingsTitleRef,
   settingsBtnRect, settingsTitleRect,
-  memoState, memoContentVisible, memoRules, compacting, clearing, clearingHeight,
+  memoState, memoContentVisible, memoRules, compacting, compactProgress, compactTotal, clearing, clearingHeight,
   memoBtnRef, memoPanelRef, memoTitleRef,
   memoBtnRect, memoTitleRect,
   openSettings, closeSettings,
@@ -30,7 +30,7 @@ const {
           @click="memoryCompact"
           :disabled="compacting || messages.length === 0"
         >
-          {{ compacting ? 'Compacting...' : 'Compact' }}
+          {{ compacting ? `${compactProgress}/${compactTotal}` : 'Compact' }}
         </button>
         <button
           ref="settingsBtnRef"
