@@ -32,6 +32,7 @@ export function useApp() {
   const compactModelId = ref("");
   const baseUrl = ref("");
   const reasoningEnabled = ref(false);
+  const systemPrompt = ref("");
   const messagesEndRef = ref<HTMLDivElement | null>(null);
   const messagesContainerRef = ref<HTMLDivElement | null>(null);
   const settingsBtnRef = ref<HTMLButtonElement | null>(null);
@@ -107,13 +108,14 @@ export function useApp() {
 
   async function loadConfig() {
     try {
-      const config = await invoke<{ api_key: string; model_id: string; base_url: string; compact_model_id: string; reasoning_enabled: boolean }>("load_config");
+      const config = await invoke<{ api_key: string; model_id: string; base_url: string; compact_model_id: string; reasoning_enabled: boolean; system_prompt: string }>("load_config");
       if (config) {
         apiKey.value = config.api_key;
         if (config.model_id) modelId.value = config.model_id;
         if (config.base_url) baseUrl.value = config.base_url;
         if (config.compact_model_id) compactModelId.value = config.compact_model_id;
         reasoningEnabled.value = config.reasoning_enabled;
+        systemPrompt.value = config.system_prompt || "";
       }
     } catch (e) {
       console.error("Failed to load config:", e);
@@ -128,13 +130,14 @@ export function useApp() {
         baseUrl: baseUrl.value,
         compactModelId: compactModelId.value,
         reasoningEnabled: reasoningEnabled.value,
+        systemPrompt: systemPrompt.value,
       });
     } catch (e) {
       console.error("Failed to save config:", e);
     }
   }
 
-  watch([apiKey, modelId, baseUrl, compactModelId, reasoningEnabled], () => {
+  watch([apiKey, modelId, baseUrl, compactModelId, reasoningEnabled, systemPrompt], () => {
     saveConfig();
   }, { deep: true });
 
@@ -274,6 +277,20 @@ export function useApp() {
       messages.value = [];
       clearing.value = false;
     }, 600);
+  }
+
+  function buildSystemMessage(history: { role: string; content: string }[]) {
+    const parts: string[] = [];
+    const memosWithContent = memos.value.filter(m => m.content.trim());
+    if (memosWithContent.length > 0) {
+      parts.push(memosWithContent.map(m => `[${m.title}]: ${m.content}`).join("\n"));
+    }
+    if (systemPrompt.value.trim()) {
+      parts.push(systemPrompt.value.trim());
+    }
+    if (parts.length > 0) {
+      history.unshift({ role: "system", content: parts.join("\n") });
+    }
   }
 
   function updateMessage(idx: number, content: string) {
@@ -431,11 +448,7 @@ export function useApp() {
         content: m.content,
       }));
 
-      const memosWithContent = memos.value.filter(m => m.content.trim());
-      if (memosWithContent.length > 0) {
-        const memoText = memosWithContent.map(m => `[${m.title}]: ${m.content}`).join("\n");
-        history.unshift({ role: "system", content: memoText });
-      }
+      buildSystemMessage(history);
 
       const result = await chatCompletion(
         history,
@@ -489,11 +502,7 @@ export function useApp() {
         content: m.content,
       }));
 
-      const memosWithContent = memos.value.filter(m => m.content.trim());
-      if (memosWithContent.length > 0) {
-        const memoText = memosWithContent.map(m => `[${m.title}]: ${m.content}`).join("\n");
-        history.unshift({ role: "system", content: memoText });
-      }
+      buildSystemMessage(history);
 
       const result = await chatCompletion(
         history,
@@ -590,7 +599,7 @@ Output ONLY the updated memo content as plain text (no JSON, no wrapping). If th
 
   return {
     messages, renderedMessages, input, loading,
-    settingsState, settingsContentVisible, apiKey, modelId, compactModelId, baseUrl, reasoningEnabled,
+    settingsState, settingsContentVisible, apiKey, modelId, compactModelId, baseUrl, reasoningEnabled, systemPrompt,
     messagesEndRef, messagesContainerRef, inputRef,
     settingsBtnRef, settingsPanelRef, settingsTitleRef,
     settingsBtnRect, settingsTitleRect,

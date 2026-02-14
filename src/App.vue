@@ -3,7 +3,7 @@ import { useApp } from "./useApp";
 
 const {
   messages, renderedMessages, input, loading,
-  settingsState, settingsContentVisible, apiKey, modelId, compactModelId, baseUrl, reasoningEnabled,
+  settingsState, settingsContentVisible, apiKey, modelId, compactModelId, baseUrl, reasoningEnabled, systemPrompt,
   messagesEndRef, messagesContainerRef, inputRef,
   settingsBtnRef, settingsPanelRef, settingsTitleRef,
   settingsBtnRect, settingsTitleRect,
@@ -149,6 +149,14 @@ const {
             type="text"
             v-model="compactModelId"
             placeholder="(same as Model ID)"
+          />
+        </div>
+        <div class="form-group">
+          <label>System Prompt</label>
+          <input
+            type="text"
+            v-model="systemPrompt"
+            placeholder="Enter system prompt..."
           />
         </div>
       </div>
