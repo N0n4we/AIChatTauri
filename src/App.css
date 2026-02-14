@@ -116,6 +116,11 @@
   display: none;
 }
 
+.clearing-spacer {
+  flex-shrink: 0;
+  padding-top: 20px;
+}
+
 .empty-state {
   text-align: center;
   color: #888;
@@ -529,13 +534,13 @@
 }
 
 /* Memo Panel */
-.memo-panel .settings-content {
+.settings-panel .settings-content {
   height: 100%;
   overflow-y: auto;
   scrollbar-width: none;
 }
 
-.memo-panel .settings-content::-webkit-scrollbar {
+.settings-panel .settings-content::-webkit-scrollbar {
   display: none;
 }
 

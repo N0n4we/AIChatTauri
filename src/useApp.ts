@@ -48,6 +48,8 @@ export function useApp() {
   const memoTitleRect = ref({ top: 0, left: 0, width: 0, height: 0 });
   const memos = ref<Memo[]>([]);
   const compacting = ref(false);
+  const clearing = ref(false);
+  const clearingHeight = ref(0);
 
   let scrollRAF: number | null = null;
 
@@ -231,7 +233,26 @@ export function useApp() {
     memoRules.value.splice(index, 1);
   }
 
-  function clearMessages() { messages.value = []; }
+  function clearMessages() {
+    if (messages.value.length === 0 || clearing.value) return;
+    const container = messagesContainerRef.value;
+    if (!container) { messages.value = []; return; }
+    clearingHeight.value = container.clientHeight;
+    clearing.value = true;
+    nextTick(() => {
+      const spacer = container.querySelector(".clearing-spacer") as HTMLElement | null;
+      if (spacer) {
+        const containerRect = container.getBoundingClientRect();
+        const spacerRect = spacer.getBoundingClientRect();
+        const targetScroll = container.scrollTop + (spacerRect.top - containerRect.top);
+        container.scrollTo({ top: targetScroll, behavior: "smooth" });
+      }
+    });
+    setTimeout(() => {
+      messages.value = [];
+      clearing.value = false;
+    }, 600);
+  }
 
   function highlightMarkdown(text: string): string {
     const escape = (s: string) =>
@@ -487,7 +508,22 @@ Output ONLY the updated memo content as plain text (no JSON, no wrapping). If th
       });
 
       memos.value = await Promise.all(tasks);
+      const container = messagesContainerRef.value;
+      if (container) {
+        clearingHeight.value = container.clientHeight;
+        clearing.value = true;
+        await nextTick();
+        const spacer = container.querySelector(".clearing-spacer") as HTMLElement | null;
+        if (spacer) {
+          const containerRect = container.getBoundingClientRect();
+          const spacerRect = spacer.getBoundingClientRect();
+          const targetScroll = container.scrollTop + (spacerRect.top - containerRect.top);
+          container.scrollTo({ top: targetScroll, behavior: "smooth" });
+        }
+        await new Promise(r => setTimeout(r, 600));
+      }
       messages.value = [];
+      clearing.value = false;
     } catch (e) {
       console.error("Memory compact failed:", e);
     } finally {
@@ -501,7 +537,7 @@ Output ONLY the updated memo content as plain text (no JSON, no wrapping). If th
     messagesEndRef, messagesContainerRef,
     settingsBtnRef, settingsPanelRef, settingsTitleRef,
     settingsBtnRect, settingsTitleRect,
-    memoState, memoContentVisible, memoRules, memos, compacting,
+    memoState, memoContentVisible, memoRules, memos, compacting, clearing, clearingHeight,
     memoBtnRef, memoPanelRef, memoTitleRef,
     memoBtnRect, memoTitleRect,
     openSettings, closeSettings,

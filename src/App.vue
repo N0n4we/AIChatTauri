@@ -7,7 +7,7 @@ const {
   messagesEndRef, messagesContainerRef,
   settingsBtnRef, settingsPanelRef, settingsTitleRef,
   settingsBtnRect, settingsTitleRect,
-  memoState, memoContentVisible, memoRules, compacting,
+  memoState, memoContentVisible, memoRules, compacting, clearing, clearingHeight,
   memoBtnRef, memoPanelRef, memoTitleRef,
   memoBtnRect, memoTitleRect,
   openSettings, closeSettings,
@@ -52,7 +52,7 @@ const {
     </header>
 
     <div ref="messagesContainerRef" class="messages-container">
-      <div v-if="messages.length === 0" class="empty-state">Start a conversation!</div>
+      <div v-if="messages.length === 0 && !clearing" class="empty-state">Start a conversation!</div>
       <div
         v-for="(msg, idx) in messages"
         :key="idx"
@@ -62,6 +62,9 @@ const {
       </div>
       <div v-if="loading && messages[messages.length - 1]?.content === ''" class="message assistant">
         <div class="message-content loading">Thinking...</div>
+      </div>
+      <div v-if="clearing" class="clearing-spacer" :style="{ height: clearingHeight + 'px' }">
+        <div class="empty-state">Start a conversation!</div>
       </div>
       <div ref="messagesEndRef"></div>
     </div>
@@ -168,7 +171,7 @@ const {
         <div class="memo-list">
           <div v-for="(rule, idx) in memoRules" :key="idx" class="memo-item">
             <div class="memo-item-header" @click="toggleMemoRule(idx)">
-              <span class="memo-item-title">{{ rule.title || 'Untitled rule' }}</span>
+              <span class="memo-item-title">{{ rule.title || 'Untitled item' }}</span>
               <div class="memo-item-actions">
                 <button class="memo-remove-btn" @click.stop="removeMemoRule(idx)">&times;</button>
                 <span class="memo-arrow" :class="{ 'memo-arrow-open': rule.expanded }">&#x25B8;</span>
