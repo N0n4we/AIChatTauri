@@ -304,22 +304,42 @@
   padding: 12px 24px;
   border: none;
   border-radius: 24px;
-  background: #777aff;
+  background: transparent;
   color: white;
   font-size: 1rem;
   cursor: pointer;
 }
 
 .input-container button:disabled {
-  background: #ccc;
+  color: #555;
   cursor: not-allowed;
 }
 
 .input-container button:not(:disabled):hover {
-  background: #6670ee;
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .settings-btn-hidden {
+  visibility: hidden;
+}
+
+.memo-btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  background: #777aff;
+  color: white;
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-family: inherit;
+  font-weight: bold;
+}
+
+.memo-btn:hover {
+  background: #6670ee;
+}
+
+.memo-btn-hidden {
   visibility: hidden;
 }
 
@@ -359,7 +379,10 @@
       calc(var(--btn-width) / 100vw),
       calc(var(--btn-height) / 100vh)
     );
-    border-radius: 6px;
+    border-radius: 48px;
+  }
+  60% {
+    border-radius: 12px;
   }
   100% {
     transform: translate(0, 0) scale(1, 1);
@@ -370,7 +393,10 @@
 @keyframes collapseToButton {
   0% {
     transform: translate(0, 0) scale(1, 1);
-    border-radius: 0;
+    border-radius: 0px;
+  }
+  40% {
+    border-radius: 12px;
   }
   100% {
     transform: translate(
@@ -380,7 +406,7 @@
       calc(var(--btn-width) / 100vw),
       calc(var(--btn-height) / 100vh)
     );
-    border-radius: 6px;
+    border-radius: 48px;
   }
 }
 
@@ -487,12 +513,12 @@
 
 @keyframes textExpandToTitle {
   0% {
-    top: calc(var(--btn-top) + 8px);
+    top: calc(var(--btn-top) + 6px);
     left: calc(var(--btn-left) + 16px);
     font-size: 0.875rem;
   }
   100% {
-    top: var(--title-top);
+    top: calc(var(--title-top) + 1px);
     left: var(--title-left);
     font-size: 1.5rem;
   }
@@ -500,13 +526,149 @@
 
 @keyframes textCollapseToButton {
   0% {
-    top: var(--title-top);
+    top: calc(var(--title-top) + 1px);
     left: var(--title-left);
     font-size: 1.5rem;
   }
   100% {
-    top: calc(var(--btn-top) + 8px);
+    top: calc(var(--btn-top) + 6px);
     left: calc(var(--btn-left) + 16px);
     font-size: 0.875rem;
   }
+}
+
+/* Memo Panel */
+.memo-panel .settings-content {
+  height: 100%;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.memo-panel .settings-content::-webkit-scrollbar {
+  display: none;
+}
+
+.memo-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.memo-item {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.memo-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 14px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.memo-item-header:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.memo-item-title {
+  color: white;
+  font-size: 0.875rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  margin-right: 8px;
+}
+
+.memo-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.memo-remove-btn {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 1.1rem;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+}
+
+.memo-remove-btn:hover {
+  color: #ff6b6b;
+}
+
+.memo-arrow {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.75rem;
+  transition: transform 200ms ease;
+  display: inline-block;
+}
+
+.memo-arrow-open {
+  transform: rotate(90deg);
+}
+
+.memo-item-body-wrapper {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 250ms ease;
+}
+
+.memo-item-body-wrapper.expanded {
+  grid-template-rows: 1fr;
+}
+
+.memo-item-body {
+  overflow: hidden;
+  padding: 0 14px;
+  border-top: 1px solid transparent;
+  transition: padding 250ms ease, border-color 250ms ease;
+}
+
+.memo-item-body-wrapper.expanded .memo-item-body {
+  padding: 8px 14px 14px;
+  border-top-color: rgba(255, 255, 255, 0.08);
+}
+
+.memo-item-body .form-group {
+  margin-bottom: 10px;
+}
+
+.memo-item-body .form-group:last-child {
+  margin-bottom: 0;
+}
+
+.memo-item-body .form-group label {
+  font-size: 0.75rem;
+  margin-bottom: 4px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.memo-item-body .form-group input {
+  padding: 8px 12px;
+  font-size: 0.875rem;
+}
+
+.memo-add-btn {
+  width: 100%;
+  padding: 10px;
+  border: 2px dashed rgba(255, 255, 255, 0.25);
+  border-radius: 8px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 1.25rem;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.memo-add-btn:hover {
+  border-color: rgba(255, 255, 255, 0.5);
+  color: white;
+  background: rgba(255, 255, 255, 0.05);
 }
