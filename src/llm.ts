@@ -13,6 +13,7 @@ export interface LLMConfig {
   baseUrl: string;
   apiKey: string;
   modelId: string;
+  reasoningEnabled?: boolean;
 }
 
 export interface StreamCallbacks {
@@ -41,6 +42,7 @@ export async function chatCompletion(
           model,
           messages: history,
           stream: true,
+          ...(config.reasoningEnabled ? { reasoning: { enabled: true, exclude: false } } : { reasoning: { enabled: false, exclude: false } }),
         }),
       });
 
@@ -85,6 +87,9 @@ export async function chatCompletion(
             if (delta?.reasoning_content) {
               reasoning += delta.reasoning_content;
               callbacks?.onReasoning?.(delta.reasoning_content);
+            } else if (delta?.reasoning) {
+              reasoning += delta.reasoning;
+              callbacks?.onReasoning?.(delta.reasoning);
             }
           } catch {
             // skip malformed JSON chunks

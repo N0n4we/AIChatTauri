@@ -5,6 +5,7 @@ import { chatCompletion } from "./llm";
 export interface Message {
   role: "user" | "assistant";
   content: string;
+  reasoning?: string;
 }
 
 export type PanelState = "closed" | "expanding" | "expanded" | "collapsing";
@@ -30,6 +31,7 @@ export function useApp() {
   const modelId = ref("");
   const compactModelId = ref("");
   const baseUrl = ref("");
+  const reasoningEnabled = ref(false);
   const messagesEndRef = ref<HTMLDivElement | null>(null);
   const messagesContainerRef = ref<HTMLDivElement | null>(null);
   const settingsBtnRef = ref<HTMLButtonElement | null>(null);
@@ -95,20 +97,23 @@ export function useApp() {
   }
 
   watch(messages, (newVal, oldVal) => {
-    nextTick(() => {
-      const isNewMessage = newVal.length !== oldVal?.length;
-      scrollToBottom(isNewMessage && !loading.value);
-    });
+    if (newVal.length !== oldVal?.length || loading.value) {
+      nextTick(() => {
+        const isNewMessage = newVal.length !== oldVal?.length;
+        scrollToBottom(isNewMessage && !loading.value);
+      });
+    }
   }, { deep: true });
 
   async function loadConfig() {
     try {
-      const config = await invoke<{ api_key: string; model_id: string; base_url: string; compact_model_id: string }>("load_config");
+      const config = await invoke<{ api_key: string; model_id: string; base_url: string; compact_model_id: string; reasoning_enabled: boolean }>("load_config");
       if (config) {
         apiKey.value = config.api_key;
         if (config.model_id) modelId.value = config.model_id;
         if (config.base_url) baseUrl.value = config.base_url;
         if (config.compact_model_id) compactModelId.value = config.compact_model_id;
+        reasoningEnabled.value = config.reasoning_enabled;
       }
     } catch (e) {
       console.error("Failed to load config:", e);
@@ -122,13 +127,14 @@ export function useApp() {
         modelId: modelId.value,
         baseUrl: baseUrl.value,
         compactModelId: compactModelId.value,
+        reasoningEnabled: reasoningEnabled.value,
       });
     } catch (e) {
       console.error("Failed to save config:", e);
     }
   }
 
-  watch([apiKey, modelId, baseUrl, compactModelId], () => {
+  watch([apiKey, modelId, baseUrl, compactModelId, reasoningEnabled], () => {
     saveConfig();
   }, { deep: true });
 
@@ -270,6 +276,12 @@ export function useApp() {
     }, 600);
   }
 
+  function updateMessage(idx: number, content: string) {
+    if (idx >= 0 && idx < messages.value.length) {
+      messages.value[idx] = { ...messages.value[idx], content };
+    }
+  }
+
   const highlightCache = new Map<string, string>();
 
   function highlightMarkdown(text: string): string {
@@ -396,6 +408,7 @@ export function useApp() {
       role: m.role,
       html: highlightMarkdown(m.content),
       content: m.content,
+      reasoning: m.reasoning || "",
     }))
   );
 
@@ -408,7 +421,7 @@ export function useApp() {
     if (inputRef.value) inputRef.value.style.height = "auto";
     loading.value = true;
 
-    const assistantMessage: Message = { role: "assistant", content: "" };
+    const assistantMessage: Message = { role: "assistant", content: "", reasoning: "" };
     messages.value.push(assistantMessage);
     const assistantIndex = messages.value.length - 1;
 
@@ -426,12 +439,18 @@ export function useApp() {
 
       const result = await chatCompletion(
         history,
-        { baseUrl: baseUrl.value, apiKey: apiKey.value, modelId: modelId.value },
+        { baseUrl: baseUrl.value, apiKey: apiKey.value, modelId: modelId.value, reasoningEnabled: reasoningEnabled.value },
         {
           onContent(chunk) {
             messages.value[assistantIndex] = {
               ...messages.value[assistantIndex],
               content: messages.value[assistantIndex].content + chunk,
+            };
+          },
+          onReasoning(chunk) {
+            messages.value[assistantIndex] = {
+              ...messages.value[assistantIndex],
+              reasoning: (messages.value[assistantIndex].reasoning || "") + chunk,
             };
           },
         },
@@ -440,6 +459,7 @@ export function useApp() {
       messages.value[assistantIndex] = {
         ...messages.value[assistantIndex],
         content: result.content,
+        reasoning: result.reasoning,
       };
     } catch (e) {
       messages.value[assistantIndex] = {
@@ -459,7 +479,7 @@ export function useApp() {
     messages.value.pop();
     loading.value = true;
 
-    const assistantMessage: Message = { role: "assistant", content: "" };
+    const assistantMessage: Message = { role: "assistant", content: "", reasoning: "" };
     messages.value.push(assistantMessage);
     const assistantIndex = messages.value.length - 1;
 
@@ -477,12 +497,18 @@ export function useApp() {
 
       const result = await chatCompletion(
         history,
-        { baseUrl: baseUrl.value, apiKey: apiKey.value, modelId: modelId.value },
+        { baseUrl: baseUrl.value, apiKey: apiKey.value, modelId: modelId.value, reasoningEnabled: reasoningEnabled.value },
         {
           onContent(chunk) {
             messages.value[assistantIndex] = {
               ...messages.value[assistantIndex],
               content: messages.value[assistantIndex].content + chunk,
+            };
+          },
+          onReasoning(chunk) {
+            messages.value[assistantIndex] = {
+              ...messages.value[assistantIndex],
+              reasoning: (messages.value[assistantIndex].reasoning || "") + chunk,
             };
           },
         },
@@ -491,6 +517,7 @@ export function useApp() {
       messages.value[assistantIndex] = {
         ...messages.value[assistantIndex],
         content: result.content,
+        reasoning: result.reasoning,
       };
     } catch (e) {
       messages.value[assistantIndex] = {
@@ -563,7 +590,7 @@ Output ONLY the updated memo content as plain text (no JSON, no wrapping). If th
 
   return {
     messages, renderedMessages, input, loading,
-    settingsState, settingsContentVisible, apiKey, modelId, compactModelId, baseUrl,
+    settingsState, settingsContentVisible, apiKey, modelId, compactModelId, baseUrl, reasoningEnabled,
     messagesEndRef, messagesContainerRef, inputRef,
     settingsBtnRef, settingsPanelRef, settingsTitleRef,
     settingsBtnRect, settingsTitleRect,
@@ -572,7 +599,7 @@ Output ONLY the updated memo content as plain text (no JSON, no wrapping). If th
     memoBtnRect, memoTitleRect,
     openSettings, closeSettings,
     openMemo, closeMemo, addMemoRule, toggleMemoRule, removeMemoRule,
-    clearMessages,
+    clearMessages, updateMessage,
     sendMessage, regenerate, memoryCompact,
   };
 }

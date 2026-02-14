@@ -10,6 +10,8 @@ struct Config {
     base_url: String,
     #[serde(default)]
     compact_model_id: String,
+    #[serde(default)]
+    reasoning_enabled: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -61,6 +63,7 @@ fn load_config(app: AppHandle) -> Config {
             model_id: String::new(),
             base_url: String::new(),
             compact_model_id: String::new(),
+            reasoning_enabled: false,
         })
     } else {
         Config {
@@ -68,18 +71,20 @@ fn load_config(app: AppHandle) -> Config {
             model_id: String::new(),
             base_url: String::new(),
             compact_model_id: String::new(),
+            reasoning_enabled: false,
         }
     }
 }
 
 #[tauri::command]
-fn save_config(app: AppHandle, api_key: String, model_id: String, base_url: String, compact_model_id: String) -> bool {
+fn save_config(app: AppHandle, api_key: String, model_id: String, base_url: String, compact_model_id: String, reasoning_enabled: bool) -> bool {
     let path = get_config_path(&app);
     let config = Config {
         api_key,
         model_id,
         base_url,
         compact_model_id,
+        reasoning_enabled,
     };
     let json = serde_json::to_string_pretty(&config).unwrap();
     fs::write(path, json).is_ok()

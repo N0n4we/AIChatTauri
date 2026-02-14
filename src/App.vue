@@ -3,7 +3,7 @@ import { useApp } from "./useApp";
 
 const {
   messages, renderedMessages, input, loading,
-  settingsState, settingsContentVisible, apiKey, modelId, compactModelId, baseUrl,
+  settingsState, settingsContentVisible, apiKey, modelId, compactModelId, baseUrl, reasoningEnabled,
   messagesEndRef, messagesContainerRef, inputRef,
   settingsBtnRef, settingsPanelRef, settingsTitleRef,
   settingsBtnRect, settingsTitleRect,
@@ -12,7 +12,7 @@ const {
   memoBtnRect, memoTitleRect,
   openSettings, closeSettings,
   openMemo, closeMemo, addMemoRule, toggleMemoRule, removeMemoRule,
-  clearMessages,
+  clearMessages, updateMessage,
   sendMessage, regenerate, memoryCompact,
 } = useApp();
 </script>
@@ -56,10 +56,19 @@ const {
       <div
         v-for="(msg, idx) in renderedMessages"
         :key="idx"
-        v-memo="[msg.html]"
         :class="['message', msg.role]"
       >
-        <div class="message-content" v-html="msg.html"></div>
+        <details v-if="msg.reasoning" class="reasoning-block" :open="loading && idx === renderedMessages.length - 1">
+          <summary class="reasoning-summary">Reasoning</summary>
+          <div class="reasoning-content">{{ msg.reasoning }}</div>
+        </details>
+        <div
+          class="message-content"
+          v-html="msg.html"
+          @dblclick="(e: MouseEvent) => { const el = e.currentTarget as HTMLElement; el.contentEditable = 'true'; el.focus(); }"
+          @blur="(e: FocusEvent) => { const el = e.target as HTMLElement; el.contentEditable = 'false'; updateMessage(idx, el.innerText); }"
+          @keydown.escape="(e: KeyboardEvent) => { (e.target as HTMLElement).blur(); }"
+        ></div>
       </div>
       <div v-if="loading && messages[messages.length - 1]?.content === ''" class="message assistant">
         <div class="message-content loading">Thinking...</div>
@@ -119,7 +128,15 @@ const {
           />
         </div>
         <div class="form-group">
-          <label>Model ID</label>
+          <div class="label-row">
+            <label>Model ID</label>
+            <button
+              type="button"
+              class="reasoning-pill"
+              :class="{ active: reasoningEnabled }"
+              @click="reasoningEnabled = !reasoningEnabled"
+            >Reasoning</button>
+          </div>
           <input
             type="text"
             v-model="modelId"
