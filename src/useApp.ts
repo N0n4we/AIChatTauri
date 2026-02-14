@@ -1,6 +1,5 @@
 import { ref, onMounted, onUnmounted, nextTick, watch } from "vue";
 import { invoke } from "@tauri-apps/api/core";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import { chatCompletion } from "./llm";
 
 export interface Message {
@@ -11,14 +10,17 @@ export interface Message {
 export type PanelState = "closed" | "expanding" | "expanded" | "collapsing";
 
 export interface MemoRule {
-  description: string;
+  title: string;
   updateRule: string;
   expanded: boolean;
 }
 
-export function useApp() {
-  const appWindow = getCurrentWindow();
+export interface Memo {
+  title: string;
+  content: string;
+}
 
+export function useApp() {
   const messages = ref<Message[]>([]);
   const input = ref("");
   const loading = ref(false);
@@ -26,6 +28,7 @@ export function useApp() {
   const settingsContentVisible = ref(false);
   const apiKey = ref("");
   const modelId = ref("");
+  const compactModelId = ref("");
   const baseUrl = ref("");
   const messagesEndRef = ref<HTMLDivElement | null>(null);
   const messagesContainerRef = ref<HTMLDivElement | null>(null);
@@ -43,12 +46,15 @@ export function useApp() {
   const memoTitleRef = ref<HTMLHeadingElement | null>(null);
   const memoBtnRect = ref({ top: 0, left: 0, width: 0, height: 0 });
   const memoTitleRect = ref({ top: 0, left: 0, width: 0, height: 0 });
+  const memos = ref<Memo[]>([]);
+  const compacting = ref(false);
 
   let scrollRAF: number | null = null;
 
   onMounted(() => {
     loadConfig();
     loadMemoRules();
+    loadMemos();
   });
 
   onUnmounted(() => {
@@ -79,11 +85,12 @@ export function useApp() {
 
   async function loadConfig() {
     try {
-      const config = await invoke<{ api_key: string; model_id: string; base_url: string }>("load_config");
+      const config = await invoke<{ api_key: string; model_id: string; base_url: string; compact_model_id: string }>("load_config");
       if (config) {
         apiKey.value = config.api_key;
         if (config.model_id) modelId.value = config.model_id;
         if (config.base_url) baseUrl.value = config.base_url;
+        if (config.compact_model_id) compactModelId.value = config.compact_model_id;
       }
     } catch (e) {
       console.error("Failed to load config:", e);
@@ -96,13 +103,14 @@ export function useApp() {
         apiKey: apiKey.value,
         modelId: modelId.value,
         baseUrl: baseUrl.value,
+        compactModelId: compactModelId.value,
       });
     } catch (e) {
       console.error("Failed to save config:", e);
     }
   }
 
-  watch([apiKey, modelId, baseUrl], () => {
+  watch([apiKey, modelId, baseUrl, compactModelId], () => {
     saveConfig();
   }, { deep: true });
 
@@ -110,7 +118,7 @@ export function useApp() {
     try {
       const rules = await invoke<{ description: string; update_rule: string }[]>("load_memo_rules");
       if (rules && rules.length > 0) {
-        memoRules.value = rules.map(r => ({ description: r.description, updateRule: r.update_rule, expanded: false }));
+        memoRules.value = rules.map(r => ({ title: r.description, updateRule: r.update_rule, expanded: false }));
       }
     } catch (e) {
       console.error("Failed to load memo rules:", e);
@@ -119,7 +127,7 @@ export function useApp() {
 
   async function saveMemoRules() {
     try {
-      const rules = memoRules.value.map(m => ({ description: m.description, update_rule: m.updateRule }));
+      const rules = memoRules.value.map(m => ({ description: m.title, update_rule: m.updateRule }));
       await invoke("save_memo_rules", { rules });
     } catch (e) {
       console.error("Failed to save memo rules:", e);
@@ -128,6 +136,29 @@ export function useApp() {
 
   watch(memoRules, () => {
     saveMemoRules();
+  }, { deep: true });
+
+  async function loadMemos() {
+    try {
+      const loaded = await invoke<{ title: string; content: string }[]>("load_memos");
+      if (loaded && loaded.length > 0) {
+        memos.value = loaded;
+      }
+    } catch (e) {
+      console.error("Failed to load memos:", e);
+    }
+  }
+
+  async function saveMemos() {
+    try {
+      await invoke("save_memos", { memos: memos.value });
+    } catch (e) {
+      console.error("Failed to save memos:", e);
+    }
+  }
+
+  watch(memos, () => {
+    saveMemos();
   }, { deep: true });
 
   function openSettings() {
@@ -189,7 +220,7 @@ export function useApp() {
   }
 
   function addMemoRule() {
-    memoRules.value.push({ description: "", updateRule: "", expanded: true });
+    memoRules.value.push({ title: "", updateRule: "", expanded: true });
   }
 
   function toggleMemoRule(index: number) {
@@ -201,9 +232,6 @@ export function useApp() {
   }
 
   function clearMessages() { messages.value = []; }
-  function minimizeWindow() { appWindow.minimize(); }
-  function toggleMaximize() { appWindow.toggleMaximize(); }
-  function closeWindow() { appWindow.close(); }
 
   function highlightMarkdown(text: string): string {
     const escape = (s: string) =>
@@ -334,10 +362,16 @@ export function useApp() {
     const assistantIndex = messages.value.length - 1;
 
     try {
-      const history = messages.value.slice(0, -1).map((m) => ({
+      const history: { role: string; content: string }[] = messages.value.slice(0, -1).map((m) => ({
         role: m.role,
         content: m.content,
       }));
+
+      const memosWithContent = memos.value.filter(m => m.content.trim());
+      if (memosWithContent.length > 0) {
+        const memoText = memosWithContent.map(m => `[${m.title}]: ${m.content}`).join("\n");
+        history.unshift({ role: "system", content: memoText });
+      }
 
       const result = await chatCompletion(
         history,
@@ -366,18 +400,113 @@ export function useApp() {
     }
   }
 
+  async function regenerate() {
+    if (loading.value || messages.value.length === 0) return;
+    const last = messages.value[messages.value.length - 1];
+    if (last.role !== "assistant") return;
+
+    messages.value.pop();
+    loading.value = true;
+
+    const assistantMessage: Message = { role: "assistant", content: "" };
+    messages.value.push(assistantMessage);
+    const assistantIndex = messages.value.length - 1;
+
+    try {
+      const history: { role: string; content: string }[] = messages.value.slice(0, -1).map((m) => ({
+        role: m.role,
+        content: m.content,
+      }));
+
+      const memosWithContent = memos.value.filter(m => m.content.trim());
+      if (memosWithContent.length > 0) {
+        const memoText = memosWithContent.map(m => `[${m.title}]: ${m.content}`).join("\n");
+        history.unshift({ role: "system", content: memoText });
+      }
+
+      const result = await chatCompletion(
+        history,
+        { baseUrl: baseUrl.value, apiKey: apiKey.value, modelId: modelId.value },
+        {
+          onContent(chunk) {
+            messages.value[assistantIndex] = {
+              ...messages.value[assistantIndex],
+              content: messages.value[assistantIndex].content + chunk,
+            };
+          },
+        },
+      );
+
+      messages.value[assistantIndex] = {
+        ...messages.value[assistantIndex],
+        content: result.content,
+      };
+    } catch (e) {
+      messages.value[assistantIndex] = {
+        ...messages.value[assistantIndex],
+        content: `Error: ${e}`,
+      };
+    } finally {
+      loading.value = false;
+    }
+  }
+
+  async function memoryCompact() {
+    if (compacting.value || messages.value.length === 0) return;
+    compacting.value = true;
+
+    try {
+      const chatHistory = messages.value.map(m => `${m.role}: ${m.content}`).join("\n");
+      const config = { baseUrl: baseUrl.value, apiKey: apiKey.value, modelId: compactModelId.value || modelId.value };
+
+      const tasks = memoRules.value.map(async (rule) => {
+        const existing = memos.value.find(m => m.title === rule.title);
+        const currentContent = existing?.content || "(empty)";
+
+        const prompt = `You are a memo manager. Update a single memo based on the chat history.
+
+Memo title: ${rule.title}
+Update rule: ${rule.updateRule}
+Current content: ${currentContent}
+
+Chat history:
+${chatHistory}
+
+Output ONLY the updated memo content as plain text (no JSON, no wrapping). If there is nothing relevant in the chat, return the current content as-is.`;
+
+        try {
+          const result = await chatCompletion(
+            [{ role: "user", content: prompt }],
+            config,
+          );
+          return { title: rule.title, content: result.content.trim() };
+        } catch (e) {
+          console.error(`Memo "${rule.title}" failed:`, e);
+          return { title: rule.title, content: existing?.content || "" };
+        }
+      });
+
+      memos.value = await Promise.all(tasks);
+      messages.value = [];
+    } catch (e) {
+      console.error("Memory compact failed:", e);
+    } finally {
+      compacting.value = false;
+    }
+  }
+
   return {
     messages, input, loading,
-    settingsState, settingsContentVisible, apiKey, modelId, baseUrl,
+    settingsState, settingsContentVisible, apiKey, modelId, compactModelId, baseUrl,
     messagesEndRef, messagesContainerRef,
     settingsBtnRef, settingsPanelRef, settingsTitleRef,
     settingsBtnRect, settingsTitleRect,
-    memoState, memoContentVisible, memoRules,
+    memoState, memoContentVisible, memoRules, memos, compacting,
     memoBtnRef, memoPanelRef, memoTitleRef,
     memoBtnRect, memoTitleRect,
     openSettings, closeSettings,
     openMemo, closeMemo, addMemoRule, toggleMemoRule, removeMemoRule,
-    clearMessages, minimizeWindow, toggleMaximize, closeWindow,
-    highlightMarkdown, sendMessage,
+    clearMessages,
+    highlightMarkdown, sendMessage, regenerate, memoryCompact,
   };
 }
