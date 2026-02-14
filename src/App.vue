@@ -2,9 +2,9 @@
 import { useApp } from "./useApp";
 
 const {
-  messages, input, loading,
+  messages, renderedMessages, input, loading,
   settingsState, settingsContentVisible, apiKey, modelId, compactModelId, baseUrl,
-  messagesEndRef, messagesContainerRef,
+  messagesEndRef, messagesContainerRef, inputRef,
   settingsBtnRef, settingsPanelRef, settingsTitleRef,
   settingsBtnRect, settingsTitleRect,
   memoState, memoContentVisible, memoRules, compacting, clearing, clearingHeight,
@@ -13,7 +13,7 @@ const {
   openSettings, closeSettings,
   openMemo, closeMemo, addMemoRule, toggleMemoRule, removeMemoRule,
   clearMessages,
-  highlightMarkdown, sendMessage, regenerate, memoryCompact,
+  sendMessage, regenerate, memoryCompact,
 } = useApp();
 </script>
 
@@ -54,11 +54,12 @@ const {
     <div ref="messagesContainerRef" class="messages-container">
       <div v-if="messages.length === 0 && !clearing" class="empty-state">Start a conversation!</div>
       <div
-        v-for="(msg, idx) in messages"
+        v-for="(msg, idx) in renderedMessages"
         :key="idx"
+        v-memo="[msg.html]"
         :class="['message', msg.role]"
       >
-        <div class="message-content" v-html="highlightMarkdown(msg.content)"></div>
+        <div class="message-content" v-html="msg.html"></div>
       </div>
       <div v-if="loading && messages[messages.length - 1]?.content === ''" class="message assistant">
         <div class="message-content loading">Thinking...</div>
@@ -69,17 +70,20 @@ const {
       <div ref="messagesEndRef"></div>
     </div>
 
-    <form class="input-container" @submit.prevent="input.trim() ? sendMessage() : regenerate()">
-      <input
-        type="text"
+    <div class="input-container">
+      <textarea
+        ref="inputRef"
         v-model="input"
         placeholder="Type a message..."
         :disabled="loading"
-      />
-      <button type="submit" :disabled="loading || (!input.trim() && (messages.length === 0 || messages[messages.length - 1]?.role !== 'assistant'))">
+        rows="1"
+        @input="($event.target as HTMLTextAreaElement).style.height = 'auto'; ($event.target as HTMLTextAreaElement).style.height = ($event.target as HTMLTextAreaElement).scrollHeight + 'px'"
+        @keydown.ctrl.enter.prevent="input.trim() ? sendMessage() : regenerate()"
+      ></textarea>
+      <button @click="input.trim() ? sendMessage() : regenerate()" :disabled="loading || (!input.trim() && (messages.length === 0 || messages[messages.length - 1]?.role !== 'assistant'))">
         {{ input.trim() ? 'Send' : (messages.length > 0 && messages[messages.length - 1]?.role === 'assistant' ? 'Regen' : 'Send') }}
       </button>
-    </form>
+    </div>
 
     <div
       v-if="settingsState !== 'closed'"
