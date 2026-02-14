@@ -1,4 +1,4 @@
-import { ref, onMounted, onUnmounted, nextTick, watch } from "vue";
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { chatCompletion } from "./llm";
 
@@ -33,6 +33,7 @@ export function useApp() {
   const messagesEndRef = ref<HTMLDivElement | null>(null);
   const messagesContainerRef = ref<HTMLDivElement | null>(null);
   const settingsBtnRef = ref<HTMLButtonElement | null>(null);
+  const inputRef = ref<HTMLTextAreaElement | null>(null);
   const settingsPanelRef = ref<HTMLDivElement | null>(null);
   const settingsTitleRef = ref<HTMLHeadingElement | null>(null);
   const settingsBtnRect = ref({ top: 0, left: 0, width: 0, height: 0 });
@@ -52,15 +53,30 @@ export function useApp() {
   const clearingHeight = ref(0);
 
   let scrollRAF: number | null = null;
+  let resizeRAF: number | null = null;
+
+  function forceRepaint() {
+    if (resizeRAF) return;
+    resizeRAF = requestAnimationFrame(() => {
+      resizeRAF = null;
+      document.body.style.opacity = "0.999";
+      requestAnimationFrame(() => {
+        document.body.style.opacity = "";
+      });
+    });
+  }
 
   onMounted(() => {
     loadConfig();
     loadMemoRules();
     loadMemos();
+    window.addEventListener("resize", forceRepaint);
   });
 
   onUnmounted(() => {
     if (scrollRAF) cancelAnimationFrame(scrollRAF);
+    if (resizeRAF) cancelAnimationFrame(resizeRAF);
+    window.removeEventListener("resize", forceRepaint);
   });
 
   function scrollToBottom(smooth = false) {
@@ -254,7 +270,11 @@ export function useApp() {
     }, 600);
   }
 
+  const highlightCache = new Map<string, string>();
+
   function highlightMarkdown(text: string): string {
+    const cached = highlightCache.get(text);
+    if (cached !== undefined) return cached;
     const escape = (s: string) =>
       s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
@@ -367,8 +387,17 @@ export function useApp() {
     result = result.replace(/\x00INLINECODE(\d+)\x00/g, (_, idx) => inlineCodes[parseInt(idx)]);
     result = result.replace(/\x00TABLE(\d+)\x00/g, (_, idx) => tables[parseInt(idx)]);
 
+    highlightCache.set(text, result);
     return result;
   }
+
+  const renderedMessages = computed(() =>
+    messages.value.map(m => ({
+      role: m.role,
+      html: highlightMarkdown(m.content),
+      content: m.content,
+    }))
+  );
 
   async function sendMessage() {
     if (!input.value.trim() || loading.value) return;
@@ -376,6 +405,7 @@ export function useApp() {
     const userMessage: Message = { role: "user", content: input.value };
     messages.value.push(userMessage);
     input.value = "";
+    if (inputRef.value) inputRef.value.style.height = "auto";
     loading.value = true;
 
     const assistantMessage: Message = { role: "assistant", content: "" };
@@ -532,9 +562,9 @@ Output ONLY the updated memo content as plain text (no JSON, no wrapping). If th
   }
 
   return {
-    messages, input, loading,
+    messages, renderedMessages, input, loading,
     settingsState, settingsContentVisible, apiKey, modelId, compactModelId, baseUrl,
-    messagesEndRef, messagesContainerRef,
+    messagesEndRef, messagesContainerRef, inputRef,
     settingsBtnRef, settingsPanelRef, settingsTitleRef,
     settingsBtnRect, settingsTitleRect,
     memoState, memoContentVisible, memoRules, memos, compacting, clearing, clearingHeight,
@@ -543,6 +573,6 @@ Output ONLY the updated memo content as plain text (no JSON, no wrapping). If th
     openSettings, closeSettings,
     openMemo, closeMemo, addMemoRule, toggleMemoRule, removeMemoRule,
     clearMessages,
-    highlightMarkdown, sendMessage, regenerate, memoryCompact,
+    sendMessage, regenerate, memoryCompact,
   };
 }
