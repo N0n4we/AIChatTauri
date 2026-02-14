@@ -7,11 +7,11 @@ const {
   messagesEndRef, messagesContainerRef,
   settingsBtnRef, settingsPanelRef, settingsTitleRef,
   settingsBtnRect, settingsTitleRect,
-  memoState, memoContentVisible, memos,
+  memoState, memoContentVisible, memoRules,
   memoBtnRef, memoPanelRef, memoTitleRef,
   memoBtnRect, memoTitleRect,
   openSettings, closeSettings,
-  openMemo, closeMemo, addMemo, toggleMemo, removeMemo,
+  openMemo, closeMemo, addMemoRule, toggleMemoRule, removeMemoRule,
   clearMessages, minimizeWindow, toggleMaximize, closeWindow,
   highlightMarkdown, sendMessage,
 } = useApp();
@@ -156,28 +156,28 @@ const {
           <button class="close-btn" @click="closeMemo">&times;</button>
         </div>
         <div class="memo-list">
-          <div v-for="(memo, idx) in memos" :key="idx" class="memo-item">
-            <div class="memo-item-header" @click="toggleMemo(idx)">
-              <span class="memo-item-title">{{ memo.description || 'Untitled memo' }}</span>
+          <div v-for="(rule, idx) in memoRules" :key="idx" class="memo-item">
+            <div class="memo-item-header" @click="toggleMemoRule(idx)">
+              <span class="memo-item-title">{{ rule.description || 'Untitled rule' }}</span>
               <div class="memo-item-actions">
-                <button class="memo-remove-btn" @click.stop="removeMemo(idx)">&times;</button>
-                <span class="memo-arrow" :class="{ 'memo-arrow-open': memo.expanded }">&#x25B8;</span>
+                <button class="memo-remove-btn" @click.stop="removeMemoRule(idx)">&times;</button>
+                <span class="memo-arrow" :class="{ 'memo-arrow-open': rule.expanded }">&#x25B8;</span>
               </div>
             </div>
-            <div class="memo-item-body-wrapper" :class="{ expanded: memo.expanded }">
+            <div class="memo-item-body-wrapper" :class="{ expanded: rule.expanded }">
               <div class="memo-item-body">
                 <div class="form-group">
                   <label>Description</label>
-                  <input type="text" v-model="memo.description" placeholder="Enter description..." />
+                  <input type="text" v-model="rule.description" placeholder="Enter description..." />
                 </div>
                 <div class="form-group">
                   <label>Update Rule</label>
-                  <input type="text" v-model="memo.updateRule" placeholder="Enter update rule..." />
+                  <input type="text" v-model="rule.updateRule" placeholder="Enter update rule..." />
                 </div>
               </div>
             </div>
           </div>
-          <button class="memo-add-btn" @click="addMemo">+</button>
+          <button class="memo-add-btn" @click="addMemoRule">+</button>
         </div>
       </div>
     </div>

@@ -1,7 +1,7 @@
 import { ref, onMounted, onUnmounted, nextTick, watch } from "vue";
 import { invoke } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { chatCompletion } from "./llm";
 
 export interface Message {
   role: "user" | "assistant";
@@ -10,7 +10,7 @@ export interface Message {
 
 export type PanelState = "closed" | "expanding" | "expanded" | "collapsing";
 
-export interface MemoItem {
+export interface MemoRule {
   description: string;
   updateRule: string;
   expanded: boolean;
@@ -37,7 +37,7 @@ export function useApp() {
 
   const memoState = ref<PanelState>("closed");
   const memoContentVisible = ref(false);
-  const memos = ref<MemoItem[]>([]);
+  const memoRules = ref<MemoRule[]>([]);
   const memoBtnRef = ref<HTMLButtonElement | null>(null);
   const memoPanelRef = ref<HTMLDivElement | null>(null);
   const memoTitleRef = ref<HTMLHeadingElement | null>(null);
@@ -45,16 +45,13 @@ export function useApp() {
   const memoTitleRect = ref({ top: 0, left: 0, width: 0, height: 0 });
 
   let scrollRAF: number | null = null;
-  let unlistenStream: UnlistenFn | null = null;
-  let unlistenStreamEnd: UnlistenFn | null = null;
 
   onMounted(() => {
     loadConfig();
+    loadMemoRules();
   });
 
   onUnmounted(() => {
-    unlistenStream?.();
-    unlistenStreamEnd?.();
     if (scrollRAF) cancelAnimationFrame(scrollRAF);
   });
 
@@ -107,6 +104,30 @@ export function useApp() {
 
   watch([apiKey, modelId, baseUrl], () => {
     saveConfig();
+  }, { deep: true });
+
+  async function loadMemoRules() {
+    try {
+      const rules = await invoke<{ description: string; update_rule: string }[]>("load_memo_rules");
+      if (rules && rules.length > 0) {
+        memoRules.value = rules.map(r => ({ description: r.description, updateRule: r.update_rule, expanded: false }));
+      }
+    } catch (e) {
+      console.error("Failed to load memo rules:", e);
+    }
+  }
+
+  async function saveMemoRules() {
+    try {
+      const rules = memoRules.value.map(m => ({ description: m.description, update_rule: m.updateRule }));
+      await invoke("save_memo_rules", { rules });
+    } catch (e) {
+      console.error("Failed to save memo rules:", e);
+    }
+  }
+
+  watch(memoRules, () => {
+    saveMemoRules();
   }, { deep: true });
 
   function openSettings() {
@@ -167,16 +188,16 @@ export function useApp() {
     setTimeout(() => { memoState.value = "closed"; }, 400);
   }
 
-  function addMemo() {
-    memos.value.push({ description: "", updateRule: "", expanded: true });
+  function addMemoRule() {
+    memoRules.value.push({ description: "", updateRule: "", expanded: true });
   }
 
-  function toggleMemo(index: number) {
-    memos.value[index].expanded = !memos.value[index].expanded;
+  function toggleMemoRule(index: number) {
+    memoRules.value[index].expanded = !memoRules.value[index].expanded;
   }
 
-  function removeMemo(index: number) {
-    memos.value.splice(index, 1);
+  function removeMemoRule(index: number) {
+    memoRules.value.splice(index, 1);
   }
 
   function clearMessages() { messages.value = []; }
@@ -305,7 +326,6 @@ export function useApp() {
 
     const userMessage: Message = { role: "user", content: input.value };
     messages.value.push(userMessage);
-    const currentInput = input.value;
     input.value = "";
     loading.value = true;
 
@@ -313,41 +333,36 @@ export function useApp() {
     messages.value.push(assistantMessage);
     const assistantIndex = messages.value.length - 1;
 
-    unlistenStream?.();
-    unlistenStreamEnd?.();
-
     try {
-      const history = messages.value.slice(0, -2).map((m) => ({
+      const history = messages.value.slice(0, -1).map((m) => ({
         role: m.role,
         content: m.content,
       }));
 
-      unlistenStream = await listen<string>("chat-stream", (event) => {
-        messages.value[assistantIndex] = {
-          ...messages.value[assistantIndex],
-          content: messages.value[assistantIndex].content + event.payload,
-        };
-      });
+      const result = await chatCompletion(
+        history,
+        { baseUrl: baseUrl.value, apiKey: apiKey.value, modelId: modelId.value },
+        {
+          onContent(chunk) {
+            messages.value[assistantIndex] = {
+              ...messages.value[assistantIndex],
+              content: messages.value[assistantIndex].content + chunk,
+            };
+          },
+        },
+      );
 
-      unlistenStreamEnd = await listen("chat-stream-end", () => {
-        loading.value = false;
-        unlistenStream?.();
-        unlistenStreamEnd?.();
-        unlistenStream = null;
-        unlistenStreamEnd = null;
-      });
-
-      await invoke("chat", { message: currentInput, history });
+      messages.value[assistantIndex] = {
+        ...messages.value[assistantIndex],
+        content: result.content,
+      };
     } catch (e) {
       messages.value[assistantIndex] = {
         ...messages.value[assistantIndex],
         content: `Error: ${e}`,
       };
+    } finally {
       loading.value = false;
-      unlistenStream?.();
-      unlistenStreamEnd?.();
-      unlistenStream = null;
-      unlistenStreamEnd = null;
     }
   }
 
@@ -357,11 +372,11 @@ export function useApp() {
     messagesEndRef, messagesContainerRef,
     settingsBtnRef, settingsPanelRef, settingsTitleRef,
     settingsBtnRect, settingsTitleRect,
-    memoState, memoContentVisible, memos,
+    memoState, memoContentVisible, memoRules,
     memoBtnRef, memoPanelRef, memoTitleRef,
     memoBtnRect, memoTitleRect,
     openSettings, closeSettings,
-    openMemo, closeMemo, addMemo, toggleMemo, removeMemo,
+    openMemo, closeMemo, addMemoRule, toggleMemoRule, removeMemoRule,
     clearMessages, minimizeWindow, toggleMaximize, closeWindow,
     highlightMarkdown, sendMessage,
   };
