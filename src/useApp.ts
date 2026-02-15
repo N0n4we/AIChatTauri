@@ -38,6 +38,7 @@ export function useApp() {
   const compactModelId = ref("");
   const baseUrl = ref("");
   const reasoningEnabled = ref(false);
+  const compactReasoningEnabled = ref(false);
   const systemPrompt = ref("");
   const messagesEndRef = ref<HTMLDivElement | null>(null);
   const messagesContainerRef = ref<HTMLDivElement | null>(null);
@@ -128,13 +129,14 @@ export function useApp() {
 
   async function loadConfig() {
     try {
-      const config = await invoke<{ api_key: string; model_id: string; base_url: string; compact_model_id: string; reasoning_enabled: boolean; system_prompt: string }>("load_config");
+      const config = await invoke<{ api_key: string; model_id: string; base_url: string; compact_model_id: string; reasoning_enabled: boolean; compact_reasoning_enabled: boolean; system_prompt: string }>("load_config");
       if (config) {
         apiKey.value = config.api_key;
         if (config.model_id) modelId.value = config.model_id;
         if (config.base_url) baseUrl.value = config.base_url;
         if (config.compact_model_id) compactModelId.value = config.compact_model_id;
         reasoningEnabled.value = config.reasoning_enabled;
+        compactReasoningEnabled.value = config.compact_reasoning_enabled;
         systemPrompt.value = config.system_prompt || "";
       }
     } catch (e) {
@@ -150,6 +152,7 @@ export function useApp() {
         baseUrl: baseUrl.value,
         compactModelId: compactModelId.value,
         reasoningEnabled: reasoningEnabled.value,
+        compactReasoningEnabled: compactReasoningEnabled.value,
         systemPrompt: systemPrompt.value,
       });
     } catch (e) {
@@ -157,7 +160,7 @@ export function useApp() {
     }
   }
 
-  watch([apiKey, modelId, baseUrl, compactModelId, reasoningEnabled, systemPrompt], () => {
+  watch([apiKey, modelId, baseUrl, compactModelId, reasoningEnabled, compactReasoningEnabled, systemPrompt], () => {
     saveConfig();
   }, { deep: true });
 
@@ -590,7 +593,7 @@ export function useApp() {
 
     try {
       const chatHistory = messages.value.map(m => `${m.role}: ${m.content}`).join("\n");
-      const config = { baseUrl: baseUrl.value, apiKey: apiKey.value, modelId: compactModelId.value || modelId.value };
+      const config = { baseUrl: baseUrl.value, apiKey: apiKey.value, modelId: compactModelId.value || modelId.value, reasoningEnabled: compactReasoningEnabled.value };
 
       const tasks = memoRules.value.map(async (rule, idx) => {
         const currentContent = memos.value[idx]?.content || "(empty)";
@@ -722,7 +725,7 @@ Output ONLY the updated memo content as plain text (no JSON, no wrapping). If th
 
   return {
     messages, renderedMessages, input, loading,
-    settingsState, settingsContentVisible, apiKey, modelId, compactModelId, baseUrl, reasoningEnabled, systemPrompt,
+    settingsState, settingsContentVisible, apiKey, modelId, compactModelId, baseUrl, reasoningEnabled, compactReasoningEnabled, systemPrompt,
     messagesEndRef, messagesContainerRef, inputRef,
     settingsBtnRef, settingsPanelRef, settingsTitleRef,
     settingsBtnRect, settingsTitleRect,

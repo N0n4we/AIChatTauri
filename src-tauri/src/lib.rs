@@ -15,6 +15,8 @@ struct Config {
     #[serde(default)]
     reasoning_enabled: bool,
     #[serde(default)]
+    compact_reasoning_enabled: bool,
+    #[serde(default)]
     system_prompt: String,
 }
 
@@ -68,6 +70,7 @@ fn load_config(app: AppHandle) -> Config {
             base_url: String::new(),
             compact_model_id: String::new(),
             reasoning_enabled: false,
+            compact_reasoning_enabled: false,
             system_prompt: String::new(),
         })
     } else {
@@ -77,13 +80,14 @@ fn load_config(app: AppHandle) -> Config {
             base_url: String::new(),
             compact_model_id: String::new(),
             reasoning_enabled: false,
+            compact_reasoning_enabled: false,
             system_prompt: String::new(),
         }
     }
 }
 
 #[tauri::command]
-fn save_config(app: AppHandle, api_key: String, model_id: String, base_url: String, compact_model_id: String, reasoning_enabled: bool, system_prompt: String) -> bool {
+fn save_config(app: AppHandle, api_key: String, model_id: String, base_url: String, compact_model_id: String, reasoning_enabled: bool, compact_reasoning_enabled: bool, system_prompt: String) -> bool {
     let path = get_config_path(&app);
     let config = Config {
         api_key,
@@ -91,6 +95,7 @@ fn save_config(app: AppHandle, api_key: String, model_id: String, base_url: Stri
         base_url,
         compact_model_id,
         reasoning_enabled,
+        compact_reasoning_enabled,
         system_prompt,
     };
     let json = serde_json::to_string_pretty(&config).unwrap();
