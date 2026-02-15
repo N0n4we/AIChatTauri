@@ -7,14 +7,14 @@ const {
   messagesEndRef, messagesContainerRef, inputRef,
   settingsBtnRef, settingsPanelRef, settingsTitleRef,
   settingsBtnRect, settingsTitleRect,
-  memoState, memoContentVisible, memoRules, compacting, compactProgress, compactTotal, clearing, clearingHeight,
+  memoState, memoContentVisible, memoRules, memos, compacting, compactProgress, compactTotal, clearing, clearingHeight,
   memoBtnRef, memoPanelRef, memoTitleRef,
   memoBtnRect, memoTitleRect,
   openSettings, closeSettings,
   openMemo, closeMemo, addMemoRule, toggleMemoRule, removeMemoRule,
   clearMessages, updateMessage,
   sendMessage, regenerate, memoryCompact,
-  exportMemos, importMemos,
+  exportMemos, importMemos, exportRules, importRules,
 } = useApp();
 </script>
 
@@ -152,14 +152,6 @@ const {
             placeholder="(same as Model ID)"
           />
         </div>
-        <div class="form-group">
-          <label>System Prompt</label>
-          <input
-            type="text"
-            v-model="systemPrompt"
-            placeholder="Enter system prompt..."
-          />
-        </div>
       </div>
     </div>
 
@@ -196,10 +188,19 @@ const {
       <div class="settings-content" :class="{ 'content-visible': memoContentVisible }">
         <div class="settings-header">
           <h2 ref="memoTitleRef" :class="{ 'title-hidden': memoState === 'expanding' || memoState === 'collapsing' }">Memo</h2>
-          <div class="header-actions">
-            <button class="header-action-btn" @click="exportMemos" title="Export">Export</button>
-            <button class="header-action-btn" @click="importMemos" title="Import">Import</button>
-            <button class="close-btn" @click="closeMemo">&times;</button>
+          <button class="close-btn" @click="closeMemo">&times;</button>
+        </div>
+
+        <div class="form-group">
+          <label>System Prompt</label>
+          <input type="text" v-model="systemPrompt" placeholder="Enter system prompt..." />
+        </div>
+
+        <div class="memo-section-header">
+          <span class="memo-section-title">Rules</span>
+          <div class="memo-section-actions">
+            <button class="header-action-btn" @click="exportRules">Export</button>
+            <button class="header-action-btn" @click="importRules">Import</button>
           </div>
         </div>
         <div class="memo-list">
@@ -226,6 +227,21 @@ const {
           </div>
           <button class="memo-add-btn" @click="addMemoRule">+</button>
         </div>
+
+        <div class="memo-section-header">
+          <span class="memo-section-title">Memos</span>
+          <div class="memo-section-actions">
+            <button class="header-action-btn" @click="exportMemos">Export</button>
+            <button class="header-action-btn" @click="importMemos">Import</button>
+          </div>
+        </div>
+        <div class="memo-list" v-if="memos.length > 0">
+          <div v-for="memo in memos" :key="memo.title" class="memo-content-item">
+            <div class="memo-content-title">{{ memo.title }}</div>
+            <div class="memo-content-text">{{ memo.content || '(empty)' }}</div>
+          </div>
+        </div>
+        <div v-else class="memo-empty-hint">No memos yet. Run Compact to generate.</div>
       </div>
     </div>
 
