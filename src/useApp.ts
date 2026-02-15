@@ -11,9 +11,15 @@ export interface Message {
 export type PanelState = "closed" | "expanding" | "expanded" | "collapsing";
 
 export interface MemoRule {
+  id: string;
   title: string;
   updateRule: string;
   expanded: boolean;
+}
+
+let _ruleId = 0;
+function nextRuleId() {
+  return `rule_${Date.now()}_${_ruleId++}`;
 }
 
 export interface Memo {
@@ -170,7 +176,7 @@ export function useApp() {
     try {
       const rules = await invoke<{ description: string; update_rule: string }[]>("load_memo_rules");
       if (rules && rules.length > 0) {
-        memoRules.value = rules.map(r => ({ title: r.description, updateRule: r.update_rule, expanded: false }));
+        memoRules.value = rules.map(r => ({ id: nextRuleId(), title: r.description, updateRule: r.update_rule, expanded: false }));
       }
     } catch (e) {
       console.error("Failed to load memo rules:", e);
@@ -272,7 +278,7 @@ export function useApp() {
   }
 
   function addMemoRule() {
-    memoRules.value.push({ title: "", updateRule: "", expanded: true });
+    memoRules.value.push({ id: nextRuleId(), title: "", updateRule: "", expanded: true });
   }
 
   function toggleMemoRule(index: number) {
@@ -281,6 +287,19 @@ export function useApp() {
 
   function removeMemoRule(index: number) {
     memoRules.value.splice(index, 1);
+    if (index < memos.value.length) {
+      memos.value.splice(index, 1);
+    }
+  }
+
+  function reorderMemoRule(from: number, to: number) {
+    if (from === to) return;
+    const [rule] = memoRules.value.splice(from, 1);
+    memoRules.value.splice(to, 0, rule);
+    if (memos.value.length > 0) {
+      const [memo] = memos.value.splice(from, 1);
+      memos.value.splice(to, 0, memo);
+    }
   }
 
   function clearMessages() {
@@ -573,9 +592,8 @@ export function useApp() {
       const chatHistory = messages.value.map(m => `${m.role}: ${m.content}`).join("\n");
       const config = { baseUrl: baseUrl.value, apiKey: apiKey.value, modelId: compactModelId.value || modelId.value };
 
-      const tasks = memoRules.value.map(async (rule) => {
-        const existing = memos.value.find(m => m.title === rule.title);
-        const currentContent = existing?.content || "(empty)";
+      const tasks = memoRules.value.map(async (rule, idx) => {
+        const currentContent = memos.value[idx]?.content || "(empty)";
 
         const prompt = `You are a memo manager. Update a single memo based on the chat history.
 
@@ -598,7 +616,7 @@ Output ONLY the updated memo content as plain text (no JSON, no wrapping). If th
         } catch (e) {
           console.error(`Memo "${rule.title}" failed:`, e);
           compactProgress.value++;
-          return { title: rule.title, content: existing?.content || "" };
+          return { title: rule.title, content: memos.value[idx]?.content || "" };
         }
       });
 
@@ -661,7 +679,7 @@ Output ONLY the updated memo content as plain text (no JSON, no wrapping). If th
         }
         if (Array.isArray(data.rules)) {
           memoRules.value = data.rules.map((r: { title: string; updateRule: string }) => ({
-            title: r.title, updateRule: r.updateRule, expanded: false,
+            id: nextRuleId(), title: r.title, updateRule: r.updateRule, expanded: false,
           }));
         }
       } catch (e) {
@@ -712,7 +730,7 @@ Output ONLY the updated memo content as plain text (no JSON, no wrapping). If th
     memoBtnRef, memoPanelRef, memoTitleRef,
     memoBtnRect, memoTitleRect,
     openSettings, closeSettings,
-    openMemo, closeMemo, addMemoRule, toggleMemoRule, removeMemoRule,
+    openMemo, closeMemo, addMemoRule, toggleMemoRule, removeMemoRule, reorderMemoRule,
     clearMessages, updateMessage,
     sendMessage, regenerate, memoryCompact,
     exportMemos, importMemos, exportRules, importRules,

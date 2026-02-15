@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref } from "vue";
 import { useApp } from "./useApp";
 
 const {
@@ -11,11 +12,49 @@ const {
   memoBtnRef, memoPanelRef, memoTitleRef,
   memoBtnRect, memoTitleRect,
   openSettings, closeSettings,
-  openMemo, closeMemo, addMemoRule, toggleMemoRule, removeMemoRule,
+  openMemo, closeMemo, addMemoRule, toggleMemoRule, removeMemoRule, reorderMemoRule,
   clearMessages, updateMessage,
   sendMessage, regenerate, memoryCompact,
   exportMemos, importMemos, exportRules, importRules,
 } = useApp();
+
+const dragIdx = ref<number | null>(null);
+const memoListRef = ref<HTMLDivElement | null>(null);
+
+function startDrag(idx: number, e: PointerEvent) {
+  e.preventDefault();
+  dragIdx.value = idx;
+
+  const onMove = (ev: PointerEvent) => {
+    const listEl = memoListRef.value;
+    if (dragIdx.value === null || !listEl) return;
+    const items = listEl.querySelectorAll<HTMLElement>(".memo-item");
+    for (let i = 0; i < items.length; i++) {
+      const rect = items[i].getBoundingClientRect();
+      if (ev.clientY < rect.top + rect.height / 2) {
+        if (i !== dragIdx.value) {
+          reorderMemoRule(dragIdx.value, i);
+          dragIdx.value = i;
+        }
+        return;
+      }
+    }
+    const last = items.length - 1;
+    if (last >= 0 && last !== dragIdx.value) {
+      reorderMemoRule(dragIdx.value, last);
+      dragIdx.value = last;
+    }
+  };
+
+  const onUp = () => {
+    dragIdx.value = null;
+    document.removeEventListener("pointermove", onMove);
+    document.removeEventListener("pointerup", onUp);
+  };
+
+  document.addEventListener("pointermove", onMove);
+  document.addEventListener("pointerup", onUp);
+}
 </script>
 
 <template>
@@ -203,9 +242,15 @@ const {
             <button class="header-action-btn" @click="importRules">Import</button>
           </div>
         </div>
-        <div class="memo-list">
-          <div v-for="(rule, idx) in memoRules" :key="idx" class="memo-item">
+        <div ref="memoListRef" class="memo-list">
+          <div
+            v-for="(rule, idx) in memoRules"
+            :key="rule.id"
+            class="memo-item"
+            :class="{ 'dragging': dragIdx === idx }"
+          >
             <div class="memo-item-header" @click="toggleMemoRule(idx)">
+              <span class="drag-handle" @pointerdown.stop="startDrag(idx, $event)">&#x2261;</span>
               <span class="memo-item-title">{{ rule.title || 'Untitled item' }}</span>
               <div class="memo-item-actions">
                 <button class="memo-remove-btn" @click.stop="removeMemoRule(idx)">&times;</button>
@@ -236,9 +281,9 @@ const {
           </div>
         </div>
         <div class="memo-list" v-if="memos.length > 0">
-          <div v-for="memo in memos" :key="memo.title" class="memo-content-item">
-            <div class="memo-content-title">{{ memo.title }}</div>
-            <div class="memo-content-text">{{ memo.content || '(empty)' }}</div>
+          <div v-for="(rule, idx) in memoRules" :key="idx" class="memo-content-item">
+            <div class="memo-content-title">{{ rule.title || 'Untitled' }}</div>
+            <div class="memo-content-text">{{ memos[idx]?.content || '(empty)' }}</div>
           </div>
         </div>
         <div v-else class="memo-empty-hint">No memos yet. Run Compact to generate.</div>
