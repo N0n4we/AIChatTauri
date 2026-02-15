@@ -75,6 +75,7 @@ export function useApp() {
     loadConfig();
     loadMemoRules();
     loadMemos();
+    loadChatHistory();
     window.addEventListener("resize", forceRepaint);
   });
 
@@ -106,6 +107,17 @@ export function useApp() {
         scrollToBottom(isNewMessage && !loading.value);
       });
     }
+  }, { deep: true });
+
+  let saveChatTimeout: ReturnType<typeof setTimeout> | null = null;
+
+  watch(messages, () => {
+    if (saveChatTimeout) clearTimeout(saveChatTimeout);
+    saveChatTimeout = setTimeout(() => {
+      invoke("save_chat_history", { messages: messages.value }).catch(e =>
+        console.error("Failed to save chat history:", e)
+      );
+    }, 500);
   }, { deep: true });
 
   async function loadConfig() {
@@ -142,6 +154,17 @@ export function useApp() {
   watch([apiKey, modelId, baseUrl, compactModelId, reasoningEnabled, systemPrompt], () => {
     saveConfig();
   }, { deep: true });
+
+  async function loadChatHistory() {
+    try {
+      const history = await invoke<Message[]>("load_chat_history");
+      if (history && history.length > 0) {
+        messages.value = history;
+      }
+    } catch (e) {
+      console.error("Failed to load chat history:", e);
+    }
+  }
 
   async function loadMemoRules() {
     try {
@@ -580,6 +603,11 @@ Output ONLY the updated memo content as plain text (no JSON, no wrapping). If th
       });
 
       memos.value = await Promise.all(tasks);
+
+      await invoke("archive_chat_history", { messages: messages.value }).catch(e =>
+        console.error("Failed to archive chat history:", e)
+      );
+
       const container = messagesContainerRef.value;
       if (container) {
         clearingHeight.value = container.clientHeight;
