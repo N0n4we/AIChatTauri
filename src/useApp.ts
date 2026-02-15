@@ -631,6 +631,37 @@ Output ONLY the updated memo content as plain text (no JSON, no wrapping). If th
     }
   }
 
+  function exportMemos() {
+    const json = JSON.stringify(memos.value, null, 2);
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "memos.json";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function importMemos() {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".json";
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const imported = JSON.parse(text) as Memo[];
+        if (Array.isArray(imported)) {
+          memos.value = imported;
+        }
+      } catch (e) {
+        console.error("Failed to import memos:", e);
+      }
+    };
+    input.click();
+  }
+
   return {
     messages, renderedMessages, input, loading,
     settingsState, settingsContentVisible, apiKey, modelId, compactModelId, baseUrl, reasoningEnabled, systemPrompt,
@@ -644,5 +675,6 @@ Output ONLY the updated memo content as plain text (no JSON, no wrapping). If th
     openMemo, closeMemo, addMemoRule, toggleMemoRule, removeMemoRule,
     clearMessages, updateMessage,
     sendMessage, regenerate, memoryCompact,
+    exportMemos, importMemos,
   };
 }
