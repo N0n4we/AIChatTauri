@@ -4,7 +4,7 @@ import { useApp } from "./useApp";
 
 const {
   messages, renderedMessages, input, loading,
-  settingsState, settingsContentVisible, apiKey, modelId, compactModelId, baseUrl, reasoningEnabled, systemPrompt,
+  settingsState, settingsContentVisible, apiKey, modelId, compactModelId, baseUrl, reasoningEnabled, compactReasoningEnabled, systemPrompt,
   messagesEndRef, messagesContainerRef, inputRef,
   settingsBtnRef, settingsPanelRef, settingsTitleRef,
   settingsBtnRect, settingsTitleRect,
@@ -184,7 +184,15 @@ function startDrag(idx: number, e: PointerEvent) {
           />
         </div>
         <div class="form-group">
-          <label>Model ID for Compact</label>
+          <div class="label-row">
+            <label>Model ID for Compact</label>
+            <button
+              type="button"
+              class="reasoning-pill"
+              :class="{ active: compactReasoningEnabled }"
+              @click="compactReasoningEnabled = !compactReasoningEnabled"
+            >Reasoning</button>
+          </div>
           <input
             type="text"
             v-model="compactModelId"
