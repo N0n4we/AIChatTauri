@@ -646,6 +646,26 @@
   display: none;
 }
 
+.memo-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 16px 0 8px;
+}
+
+.memo-section-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.7);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.memo-section-actions {
+  display: flex;
+  gap: 6px;
+}
+
 .memo-list {
   display: flex;
   flex-direction: column;
@@ -769,4 +789,30 @@
   border-color: rgba(255, 255, 255, 0.5);
   color: white;
   background: rgba(255, 255, 255, 0.05);
+}
+
+.memo-content-item {
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  padding: 10px 14px;
+}
+
+.memo-content-title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.7);
+  margin-bottom: 4px;
+}
+
+.memo-content-text {
+  font-size: 0.825rem;
+  color: rgba(255, 255, 255, 0.55);
+  white-space: pre-wrap;
+  line-height: 1.4;
+}
+
+.memo-empty-hint {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.35);
+  padding: 8px 0;
 }

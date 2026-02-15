@@ -631,6 +631,46 @@ Output ONLY the updated memo content as plain text (no JSON, no wrapping). If th
     }
   }
 
+  function exportRules() {
+    const data = {
+      systemPrompt: systemPrompt.value,
+      rules: memoRules.value.map(r => ({ title: r.title, updateRule: r.updateRule })),
+    };
+    const json = JSON.stringify(data, null, 2);
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "memo-rules.json";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function importRules() {
+    const fileInput = document.createElement("input");
+    fileInput.type = "file";
+    fileInput.accept = ".json";
+    fileInput.onchange = async () => {
+      const file = fileInput.files?.[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const data = JSON.parse(text);
+        if (data.systemPrompt !== undefined) {
+          systemPrompt.value = data.systemPrompt;
+        }
+        if (Array.isArray(data.rules)) {
+          memoRules.value = data.rules.map((r: { title: string; updateRule: string }) => ({
+            title: r.title, updateRule: r.updateRule, expanded: false,
+          }));
+        }
+      } catch (e) {
+        console.error("Failed to import rules:", e);
+      }
+    };
+    fileInput.click();
+  }
+
   function exportMemos() {
     const json = JSON.stringify(memos.value, null, 2);
     const blob = new Blob([json], { type: "application/json" });
@@ -675,6 +715,6 @@ Output ONLY the updated memo content as plain text (no JSON, no wrapping). If th
     openMemo, closeMemo, addMemoRule, toggleMemoRule, removeMemoRule,
     clearMessages, updateMessage,
     sendMessage, regenerate, memoryCompact,
-    exportMemos, importMemos,
+    exportMemos, importMemos, exportRules, importRules,
   };
 }
