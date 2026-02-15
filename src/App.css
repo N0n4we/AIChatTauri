@@ -676,6 +676,28 @@
   background: rgba(255, 255, 255, 0.1);
   border-radius: 8px;
   overflow: hidden;
+  transition: opacity 150ms ease;
+}
+
+.memo-item.dragging {
+  opacity: 0.5;
+}
+
+.drag-handle {
+  cursor: grab;
+  font-size: 1.1rem;
+  color: rgba(255, 255, 255, 0.4);
+  padding: 0 4px;
+  user-select: none;
+  touch-action: none;
+}
+
+.drag-handle:hover {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.drag-handle:active {
+  cursor: grabbing;
 }
 
 .memo-item-header {
