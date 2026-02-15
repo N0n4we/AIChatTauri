@@ -14,6 +14,7 @@ const {
   openMemo, closeMemo, addMemoRule, toggleMemoRule, removeMemoRule,
   clearMessages, updateMessage,
   sendMessage, regenerate, memoryCompact,
+  exportMemos, importMemos,
 } = useApp();
 </script>
 
@@ -195,7 +196,11 @@ const {
       <div class="settings-content" :class="{ 'content-visible': memoContentVisible }">
         <div class="settings-header">
           <h2 ref="memoTitleRef" :class="{ 'title-hidden': memoState === 'expanding' || memoState === 'collapsing' }">Memo</h2>
-          <button class="close-btn" @click="closeMemo">&times;</button>
+          <div class="header-actions">
+            <button class="header-action-btn" @click="exportMemos" title="Export">Export</button>
+            <button class="header-action-btn" @click="importMemos" title="Import">Import</button>
+            <button class="close-btn" @click="closeMemo">&times;</button>
+          </div>
         </div>
         <div class="memo-list">
           <div v-for="(rule, idx) in memoRules" :key="idx" class="memo-item">
