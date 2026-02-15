@@ -60,7 +60,7 @@ function startDrag(idx: number, e: PointerEvent) {
 <template>
   <main class="chat-container">
     <header class="chat-header" data-tauri-drag-region>
-      <h1 data-tauri-drag-region>AIChat</h1>
+      <h1 data-tauri-drag-region>MemoChat</h1>
       <div class="header-actions">
         <button class="clear-btn" @click="clearMessages" :disabled="messages.length === 0">
           +

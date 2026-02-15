@@ -1,10 +1,10 @@
 [package]
-name = "ai-chat-tauri"
+name = "memochat"
 version = "0.1.0"
 edition = "2021"
 
 [lib]
-name = "ai_chat_tauri_lib"
+name = "memochat_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
