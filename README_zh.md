@@ -15,6 +15,7 @@
 - **兼容 OpenAI API** — 支持任何 OpenAI 兼容的 API 端点，流式输出，支持 Reasoning/Thinking
 - **Memo 记忆系统** — 定义规则（如"记录用户偏好"），对话结束后自动提取信息写入备忘录，下次对话时作为上下文注入
 - **Memory Compact** — 使用指定模型根据聊天记录更新所有备忘录，归档并清空当前对话
+- **MemoPack市场** — 浏览、创建、导入导出、通过远程频道分享MemoPack
 - **聊天记录持久化** — 自动保存，启动时恢复，Compact 时自动归档
 - **导入/导出** — Rules 和 Memos 均可独立导入导出为 JSON
 - **拖拽排序** — Memo 规则支持拖拽调整顺序
@@ -41,7 +42,7 @@ pnpm tauri build
 
 ## 配置
 
-在 Settings 面板中设置：
+在 Settings 标签页中设置：
 
 | 字段 | 说明 |
 |------|------|
@@ -50,6 +51,7 @@ pnpm tauri build
 | Model ID | 聊天模型 |
 | Model ID for Compact | Compact 使用的模型（可选，默认同上） |
 | Reasoning | 启用思维链 |
+| Channels | 后端服务器地址，用于浏览和发布规则包 |
 
 在 Memo 面板中设置 System Prompt 和 Memo Rules。
 

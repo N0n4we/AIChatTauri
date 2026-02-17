@@ -15,6 +15,7 @@ A desktop AI chat client with a memory system. Define custom rules to automatica
 - **OpenAI API Compatible** — Works with any OpenAI-compatible API endpoint, streaming output, supports Reasoning/Thinking
 - **Memo Memory System** — Define rules (e.g. "record user preferences"), automatically extract info after conversations and write to memos, injected as context in future chats
 - **Memory Compact** — Uses a specified model to update all memos based on chat history, then archives and clears the current conversation
+- **MemoPack Market** — Browse, create, import/export, and share rule packs locally or via remote channels
 - **Persistent Chat History** — Auto-saved, restored on startup, auto-archived on Compact
 - **Import/Export** — Rules and Memos can be independently imported/exported as JSON
 - **Drag & Drop Sorting** — Memo rules support drag-and-drop reordering
@@ -41,7 +42,7 @@ pnpm tauri build
 
 ## Configuration
 
-Set up in the Settings panel:
+Configure in the Settings tab:
 
 | Field | Description |
 |-------|-------------|
@@ -50,6 +51,7 @@ Set up in the Settings panel:
 | Model ID | Chat model |
 | Model ID for Compact | Model used for Compact (optional, defaults to chat model) |
 | Reasoning | Enable chain-of-thought |
+| Channels | Backend server URLs for browsing and publishing rule packs |
 
 Set up System Prompt and Memo Rules in the Memo panel.
 

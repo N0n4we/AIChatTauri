@@ -26,8 +26,8 @@ export async function chatCompletion(
   config: LLMConfig,
   callbacks?: StreamCallbacks,
 ): Promise<ChatResponse> {
-  const baseUrl = config.baseUrl || "https://api.openai.com/v1";
-  const model = config.modelId || "gpt-3.5-turbo";
+  const baseUrl = config.baseUrl || "https://openrouter/api/v1";
+  const model = config.modelId || "z-ai/glm-5";
 
   let lastError: unknown;
   for (let attempt = 0; attempt < 3; attempt++) {

@@ -27,12 +27,13 @@ export interface Memo {
   content: string;
 }
 
+export type TabType = "chat" | "market" | "settings";
+
 export function useApp() {
+  const currentTab = ref<TabType>("chat");
   const messages = ref<Message[]>([]);
   const input = ref("");
   const loading = ref(false);
-  const settingsState = ref<PanelState>("closed");
-  const settingsContentVisible = ref(false);
   const apiKey = ref("");
   const modelId = ref("");
   const compactModelId = ref("");
@@ -42,12 +43,7 @@ export function useApp() {
   const systemPrompt = ref("");
   const messagesEndRef = ref<HTMLDivElement | null>(null);
   const messagesContainerRef = ref<HTMLDivElement | null>(null);
-  const settingsBtnRef = ref<HTMLButtonElement | null>(null);
   const inputRef = ref<HTMLTextAreaElement | null>(null);
-  const settingsPanelRef = ref<HTMLDivElement | null>(null);
-  const settingsTitleRef = ref<HTMLHeadingElement | null>(null);
-  const settingsBtnRect = ref({ top: 0, left: 0, width: 0, height: 0 });
-  const settingsTitleRect = ref({ top: 0, left: 0, width: 0, height: 0 });
 
   const memoState = ref<PanelState>("closed");
   const memoContentVisible = ref(false);
@@ -145,6 +141,9 @@ export function useApp() {
 
   async function saveConfig() {
     try {
+      // Load existing config to preserve channelsJson and activePackId
+      const existingConfig = await invoke<{ channels_json?: string; active_pack_id?: string }>("load_config");
+
       await invoke("save_config", {
         apiKey: apiKey.value,
         modelId: modelId.value,
@@ -153,6 +152,8 @@ export function useApp() {
         reasoningEnabled: reasoningEnabled.value,
         compactReasoningEnabled: compactReasoningEnabled.value,
         systemPrompt: systemPrompt.value,
+        channelsJson: existingConfig?.channels_json || "",
+        activePackId: existingConfig?.active_pack_id || "",
       });
     } catch (e) {
       console.error("Failed to save config:", e);
@@ -176,13 +177,29 @@ export function useApp() {
 
   async function loadMemoPack() {
     try {
-      const pack = await invoke<{ rules: { description: string; update_rule: string }[]; memos: { title: string; content: string }[] }>("load_memo_pack");
+      const pack = await invoke<{
+        id: string;
+        name: string;
+        description: string;
+        author: string;
+        version: string;
+        system_prompt: string;
+        rules: { description: string; update_rule: string }[];
+        memos: { title: string; content: string }[];
+        tags: string[];
+        created_at: string;
+        updated_at: string;
+      } | null>("get_active_pack");
+
       if (pack) {
         if (pack.rules && pack.rules.length > 0) {
           memoRules.value = pack.rules.map(r => ({ id: nextRuleId(), title: r.description, updateRule: r.update_rule, expanded: false }));
         }
         if (pack.memos && pack.memos.length > 0) {
           memos.value = pack.memos;
+        }
+        if (pack.system_prompt) {
+          systemPrompt.value = pack.system_prompt;
         }
       }
     } catch (e) {
@@ -192,11 +209,37 @@ export function useApp() {
 
   async function saveMemoPack() {
     try {
+      // Get current active pack or create a new one
+      const existingPack = await invoke<{
+        id: string;
+        name: string;
+        description: string;
+        author: string;
+        version: string;
+        system_prompt: string;
+        rules: { description: string; update_rule: string }[];
+        memos: { title: string; content: string }[];
+        tags: string[];
+        created_at: string;
+        updated_at: string;
+      } | null>("get_active_pack");
+
       const pack = {
+        id: existingPack?.id || `pack_${Date.now()}`,
+        name: existingPack?.name || "My Pack",
+        description: existingPack?.description || "",
+        author: existingPack?.author || "",
+        version: existingPack?.version || "1.0.0",
+        system_prompt: systemPrompt.value,
         rules: memoRules.value.map(m => ({ description: m.title, update_rule: m.updateRule })),
         memos: memos.value,
+        tags: existingPack?.tags || [],
+        created_at: existingPack?.created_at || new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       };
-      await invoke("save_memo_pack", { pack });
+
+      await invoke("save_pack", { pack });
+      await invoke("set_active_pack", { packId: pack.id });
     } catch (e) {
       console.error("Failed to save memo pack:", e);
     }
@@ -205,35 +248,6 @@ export function useApp() {
   watch([memoRules, memos], () => {
     saveMemoPack();
   }, { deep: true });
-
-  function openSettings() {
-    if (settingsBtnRef.value) {
-      const rect = settingsBtnRef.value.getBoundingClientRect();
-      settingsBtnRect.value = { top: rect.top, left: rect.left, width: rect.width, height: rect.height };
-    }
-    const contentMaxWidth = 400;
-    const contentPaddingTop = 40;
-    const contentPaddingLeft = 24;
-    const contentLeft = Math.max((window.innerWidth - contentMaxWidth) / 2, 0);
-    settingsTitleRect.value = { top: contentPaddingTop, left: contentLeft + contentPaddingLeft, width: 0, height: 0 };
-    settingsState.value = "expanding";
-    setTimeout(() => { settingsContentVisible.value = true; }, 150);
-    setTimeout(() => { settingsState.value = "expanded"; }, 400);
-  }
-
-  function closeSettings() {
-    if (settingsBtnRef.value) {
-      const rect = settingsBtnRef.value.getBoundingClientRect();
-      settingsBtnRect.value = { top: rect.top, left: rect.left, width: rect.width, height: rect.height };
-    }
-    if (settingsTitleRef.value) {
-      const rect = settingsTitleRef.value.getBoundingClientRect();
-      settingsTitleRect.value = { top: rect.top, left: rect.left, width: rect.width, height: rect.height };
-    }
-    settingsContentVisible.value = false;
-    settingsState.value = "collapsing";
-    setTimeout(() => { settingsState.value = "closed"; }, 400);
-  }
 
   function openMemo() {
     if (memoBtnRef.value) {
@@ -708,15 +722,13 @@ Output ONLY the updated memo content as plain text (no JSON, no wrapping). If th
   }
 
   return {
+    currentTab,
     messages, renderedMessages, input, loading,
-    settingsState, settingsContentVisible, apiKey, modelId, compactModelId, baseUrl, reasoningEnabled, compactReasoningEnabled, systemPrompt,
+    apiKey, modelId, compactModelId, baseUrl, reasoningEnabled, compactReasoningEnabled, systemPrompt,
     messagesEndRef, messagesContainerRef, inputRef,
-    settingsBtnRef, settingsPanelRef, settingsTitleRef,
-    settingsBtnRect, settingsTitleRect,
     memoState, memoContentVisible, memoRules, memos, compacting, compactProgress, compactTotal, clearing, clearingHeight,
     memoBtnRef, memoPanelRef, memoTitleRef,
     memoBtnRect, memoTitleRect,
-    openSettings, closeSettings,
     openMemo, closeMemo, addMemoRule, toggleMemoRule, removeMemoRule, reorderMemoRule,
     clearMessages, updateMessage,
     sendMessage, regenerate, memoryCompact,

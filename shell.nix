@@ -2,21 +2,31 @@
 
 pkgs.mkShell {
   buildInputs = with pkgs; [
+    # Tauri dependencies
     pkg-config
-    glib
-    gtk3
-    webkitgtk_4_1
-    libsoup_3
     openssl
+    webkitgtk_4_1
+    gtk3
     cairo
-    pango
     gdk-pixbuf
-    atk
+    glib
+    dbus
     librsvg
+
+    # Build tools
+    cargo
+    rustc
+    nodejs
+    pnpm
+
+    # System libraries
+    zlib
+    libsoup_3
   ];
 
   shellHook = ''
-    export GIO_MODULE_DIR="${pkgs.glib-networking}/lib/gio/modules"
+    export PKG_CONFIG_PATH="${pkgs.openssl.dev}/lib/pkgconfig:${pkgs.webkitgtk_4_1}/lib/pkgconfig:${pkgs.gtk3}/lib/pkgconfig:$PKG_CONFIG_PATH"
+    export LD_LIBRARY_PATH="${pkgs.lib.makeLibraryPath [ pkgs.webkitgtk_4_1 pkgs.gtk3 pkgs.cairo pkgs.gdk-pixbuf pkgs.glib pkgs.dbus pkgs.zlib pkgs.libsoup_3 ]}:$LD_LIBRARY_PATH"
     export XDG_DATA_DIRS="$GSETTINGS_SCHEMAS_PATH"
   '';
 }
