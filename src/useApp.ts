@@ -80,8 +80,7 @@ export function useApp() {
 
   onMounted(() => {
     loadConfig();
-    loadMemoRules();
-    loadMemos();
+    loadMemoPack();
     loadChatHistory();
     window.addEventListener("resize", forceRepaint);
   });
@@ -175,51 +174,36 @@ export function useApp() {
     }
   }
 
-  async function loadMemoRules() {
+  async function loadMemoPack() {
     try {
-      const rules = await invoke<{ description: string; update_rule: string }[]>("load_memo_rules");
-      if (rules && rules.length > 0) {
-        memoRules.value = rules.map(r => ({ id: nextRuleId(), title: r.description, updateRule: r.update_rule, expanded: false }));
+      const pack = await invoke<{ rules: { description: string; update_rule: string }[]; memos: { title: string; content: string }[] }>("load_memo_pack");
+      if (pack) {
+        if (pack.rules && pack.rules.length > 0) {
+          memoRules.value = pack.rules.map(r => ({ id: nextRuleId(), title: r.description, updateRule: r.update_rule, expanded: false }));
+        }
+        if (pack.memos && pack.memos.length > 0) {
+          memos.value = pack.memos;
+        }
       }
     } catch (e) {
-      console.error("Failed to load memo rules:", e);
+      console.error("Failed to load memo pack:", e);
     }
   }
 
-  async function saveMemoRules() {
+  async function saveMemoPack() {
     try {
-      const rules = memoRules.value.map(m => ({ description: m.title, update_rule: m.updateRule }));
-      await invoke("save_memo_rules", { rules });
+      const pack = {
+        rules: memoRules.value.map(m => ({ description: m.title, update_rule: m.updateRule })),
+        memos: memos.value,
+      };
+      await invoke("save_memo_pack", { pack });
     } catch (e) {
-      console.error("Failed to save memo rules:", e);
+      console.error("Failed to save memo pack:", e);
     }
   }
 
-  watch(memoRules, () => {
-    saveMemoRules();
-  }, { deep: true });
-
-  async function loadMemos() {
-    try {
-      const loaded = await invoke<{ title: string; content: string }[]>("load_memos");
-      if (loaded && loaded.length > 0) {
-        memos.value = loaded;
-      }
-    } catch (e) {
-      console.error("Failed to load memos:", e);
-    }
-  }
-
-  async function saveMemos() {
-    try {
-      await invoke("save_memos", { memos: memos.value });
-    } catch (e) {
-      console.error("Failed to save memos:", e);
-    }
-  }
-
-  watch(memos, () => {
-    saveMemos();
+  watch([memoRules, memos], () => {
+    saveMemoPack();
   }, { deep: true });
 
   function openSettings() {

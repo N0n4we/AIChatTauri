@@ -32,6 +32,12 @@ struct Memo {
     content: String,
 }
 
+#[derive(Serialize, Deserialize, Clone)]
+struct MemoPack {
+    rules: Vec<MemoRule>,
+    memos: Vec<Memo>,
+}
+
 fn get_config_path(app: &AppHandle) -> PathBuf {
     let config_dir = app
         .path()
@@ -41,22 +47,13 @@ fn get_config_path(app: &AppHandle) -> PathBuf {
     config_dir.join("config.json")
 }
 
-fn get_memo_rules_path(app: &AppHandle) -> PathBuf {
+fn get_memo_pack_path(app: &AppHandle) -> PathBuf {
     let config_dir = app
         .path()
         .app_config_dir()
         .expect("failed to get config dir");
     fs::create_dir_all(&config_dir).ok();
-    config_dir.join("memo-rules.json")
-}
-
-fn get_memos_path(app: &AppHandle) -> PathBuf {
-    let config_dir = app
-        .path()
-        .app_config_dir()
-        .expect("failed to get config dir");
-    fs::create_dir_all(&config_dir).ok();
-    config_dir.join("memos.json")
+    config_dir.join("memo-pack.json")
 }
 
 #[tauri::command]
@@ -103,38 +100,26 @@ fn save_config(app: AppHandle, api_key: String, model_id: String, base_url: Stri
 }
 
 #[tauri::command]
-fn load_memo_rules(app: AppHandle) -> Vec<MemoRule> {
-    let path = get_memo_rules_path(&app);
+fn load_memo_pack(app: AppHandle) -> MemoPack {
+    let path = get_memo_pack_path(&app);
     if path.exists() {
         let json = fs::read_to_string(&path).unwrap_or_default();
-        serde_json::from_str(&json).unwrap_or_default()
+        serde_json::from_str(&json).unwrap_or(MemoPack {
+            rules: Vec::new(),
+            memos: Vec::new(),
+        })
     } else {
-        Vec::new()
+        MemoPack {
+            rules: Vec::new(),
+            memos: Vec::new(),
+        }
     }
 }
 
 #[tauri::command]
-fn save_memo_rules(app: AppHandle, rules: Vec<MemoRule>) -> bool {
-    let path = get_memo_rules_path(&app);
-    let json = serde_json::to_string_pretty(&rules).unwrap();
-    fs::write(path, json).is_ok()
-}
-
-#[tauri::command]
-fn load_memos(app: AppHandle) -> Vec<Memo> {
-    let path = get_memos_path(&app);
-    if path.exists() {
-        let json = fs::read_to_string(&path).unwrap_or_default();
-        serde_json::from_str(&json).unwrap_or_default()
-    } else {
-        Vec::new()
-    }
-}
-
-#[tauri::command]
-fn save_memos(app: AppHandle, memos: Vec<Memo>) -> bool {
-    let path = get_memos_path(&app);
-    let json = serde_json::to_string_pretty(&memos).unwrap();
+fn save_memo_pack(app: AppHandle, pack: MemoPack) -> bool {
+    let path = get_memo_pack_path(&app);
+    let json = serde_json::to_string_pretty(&pack).unwrap();
     fs::write(path, json).is_ok()
 }
 
@@ -187,7 +172,7 @@ fn archive_chat_history(app: AppHandle, messages: Vec<Value>) -> bool {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![load_config, save_config, load_memo_rules, save_memo_rules, load_memos, save_memos, load_chat_history, save_chat_history, archive_chat_history])
+        .invoke_handler(tauri::generate_handler![load_config, save_config, load_memo_pack, save_memo_pack, load_chat_history, save_chat_history, archive_chat_history])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
