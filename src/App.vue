@@ -1,24 +1,29 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, onMounted, onUnmounted } from "vue";
 import { useApp } from "./useApp";
 import { useMarket } from "./useMarket";
 
 const {
   currentTab,
-  messages, renderedMessages, input, loading,
+  messages, renderedMessages, renderedArchiveMessages, input, loading,
   apiKey, modelId, compactModelId, baseUrl, reasoningEnabled, compactReasoningEnabled, systemPrompt,
   messagesEndRef, messagesContainerRef, inputRef,
   memoState, memoContentVisible, memoRules, memos, compacting, compactProgress, compactTotal, clearing, clearingHeight,
+  sessions, currentSessionId,
+  archives, selectedArchive, archiveMessages,
   memoBtnRef, memoPanelRef, memoTitleRef,
   memoBtnRect, memoTitleRect,
   openMemo, closeMemo, addMemoRule, toggleMemoRule, removeMemoRule, reorderMemoRule,
   clearMessages, updateMessage,
   sendMessage, regenerate, memoryCompact,
+  newChat, switchSession, deleteSession, loadSessions,
+  loadArchives, openArchive, closeArchive,
   exportMemos, importMemos, exportRules, importRules,
+  loadMemoPack,
 } = useApp();
 
 const {
-  packs, installedIds, currentView: marketView, selectedPack, searchQuery, filterTag,
+  packs, currentView: marketView, selectedPack, searchQuery, filterTag,
   filteredPacks, allTags,
   editPack,
   startCreate, startEdit, addRule, removeRule, addMemo, removeMemo, addTag, removeTag,
@@ -29,12 +34,35 @@ const {
   publishing, publishError, publishSuccess,
   newChannelUrl, newChannelToken, addingChannel, addChannelError,
   addChannel, removeChannel, updateChannelToken, registerOnChannel,
-  publishPack, openPublish, toggleInstall, deletePack,
+  publishPack, openPublish, installPack, deletePack,
 } = useMarket();
 
 const tagInput = ref("");
 const regUsername = ref("");
 const regDisplayName = ref("");
+const historyOpen = ref(false);
+const historyDropdownRef = ref<HTMLDivElement | null>(null);
+
+function toggleHistory() {
+  if (!historyOpen.value) loadSessions();
+  historyOpen.value = !historyOpen.value;
+}
+
+function onHistoryClickOutside(e: MouseEvent) {
+  if (historyDropdownRef.value && !historyDropdownRef.value.contains(e.target as Node)) {
+    historyOpen.value = false;
+  }
+}
+
+function formatDate(iso: string) {
+  try {
+    const d = new Date(iso);
+    return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+  } catch { return ''; }
+}
+
+onMounted(() => document.addEventListener("mousedown", onHistoryClickOutside));
+onUnmounted(() => document.removeEventListener("mousedown", onHistoryClickOutside));
 
 function handleAddTag() {
   if (tagInput.value.trim()) {
@@ -93,9 +121,27 @@ function startDrag(idx: number, e: PointerEvent) {
     <header class="chat-header" data-tauri-drag-region>
       <h1 data-tauri-drag-region>MemoChat</h1>
       <div class="header-actions">
-        <button class="clear-btn" @click="clearMessages" :disabled="messages.length === 0">
+        <button class="clear-btn" @click="newChat" :disabled="messages.length === 0 && !currentSessionId">
           +
         </button>
+        <div ref="historyDropdownRef" class="history-dropdown-wrapper">
+          <button class="history-btn" @click="toggleHistory">&#x25BE;</button>
+          <div v-if="historyOpen" class="history-dropdown">
+            <div v-if="sessions.length === 0" class="history-empty">No saved chats</div>
+            <div
+              v-for="s in sessions" :key="s.id"
+              class="history-item"
+              :class="{ active: s.id === currentSessionId }"
+              @click="switchSession(s.id); historyOpen = false"
+            >
+              <div class="history-item-info">
+                <span class="history-item-title">{{ s.title || 'Untitled' }}</span>
+                <span class="history-item-meta">{{ formatDate(s.created_at) }} · {{ s.message_count }} msgs</span>
+              </div>
+              <button class="history-item-delete" @click.stop="deleteSession(s.id)">&times;</button>
+            </div>
+          </div>
+        </div>
         <button
           class="compact-btn"
           @click="memoryCompact"
@@ -160,6 +206,40 @@ function startDrag(idx: number, e: PointerEvent) {
       </div>
     </div>
 
+    <!-- Archives Tab Content -->
+    <div v-if="currentTab === 'archives'" class="tab-content archives-content">
+      <div v-if="!selectedArchive" class="archives-list-view">
+        <div v-if="archives.length === 0" class="empty-state">No archived conversations</div>
+        <div
+          v-for="entry in archives" :key="entry.filename"
+          class="archive-item"
+          @click="openArchive(entry.filename)"
+        >
+          <span class="archive-item-date">{{ formatDate(entry.created_at) }}</span>
+          <span class="archive-item-count">{{ entry.message_count }} msgs</span>
+        </div>
+      </div>
+      <div v-else class="archives-detail-view">
+        <div class="archive-detail-header">
+          <button class="back-btn" @click="closeArchive">&larr; Back</button>
+          <span class="archive-detail-title">{{ formatDate(archives.find(a => a.filename === selectedArchive)?.created_at || '') }}</span>
+        </div>
+        <div class="messages-container archive-messages">
+          <div
+            v-for="(msg, idx) in renderedArchiveMessages"
+            :key="idx"
+            :class="['message', msg.role]"
+          >
+            <details v-if="msg.reasoning" class="reasoning-block">
+              <summary class="reasoning-summary">Reasoning</summary>
+              <div class="reasoning-content">{{ msg.reasoning }}</div>
+            </details>
+            <div class="message-content" v-html="msg.html"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Market Tab Content -->
     <div v-if="currentTab === 'market'" class="tab-content market-content">
       <!-- Market Header -->
@@ -198,7 +278,7 @@ function startDrag(idx: number, e: PointerEvent) {
         <div v-if="filteredPacks.length === 0" class="empty-state">
           <p v-if="viewMode === 'remote' && channels.length === 0">No channels configured. Add a backend server first.</p>
           <p v-else-if="viewMode === 'remote' && loadingRemote">Loading remote packs...</p>
-          <p v-else-if="packs.length === 0 && viewMode === 'local'">No rule packs yet. Create one or import from MemoChat!</p>
+          <p v-else-if="packs.length === 0 && viewMode === 'local'">No MemoPacks yet. Create one or import from MemoChat!</p>
           <p v-else>No packs match your search.</p>
         </div>
 
@@ -206,9 +286,6 @@ function startDrag(idx: number, e: PointerEvent) {
           <div v-for="pack in filteredPacks" :key="pack.id" class="pack-card" @click="viewPack(pack)">
             <div class="pack-card-header">
               <span class="pack-name">{{ pack.name || 'Untitled' }}</span>
-              <span v-if="viewMode === 'local'" class="install-badge" :class="{ installed: installedIds.includes(pack.id) }">
-                {{ installedIds.includes(pack.id) ? '✓' : '' }}
-              </span>
             </div>
             <p class="pack-desc">{{ pack.description || 'No description' }}</p>
             <div class="pack-meta">
@@ -232,9 +309,9 @@ function startDrag(idx: number, e: PointerEvent) {
             <button class="action-btn publish-btn" @click="openPublish(selectedPack!)">Publish</button>
             <button class="action-btn" @click="startEdit(selectedPack!)">Edit</button>
             <button
-              class="action-btn" :class="{ primary: !installedIds.includes(selectedPack!.id) }"
-              @click="toggleInstall(selectedPack!.id)"
-            >{{ installedIds.includes(selectedPack!.id) ? 'Uninstall' : 'Install' }}</button>
+              class="action-btn primary"
+              @click="installPack(selectedPack!).then(() => loadMemoPack())"
+            >Install</button>
             <button class="action-btn danger" @click="deletePack(selectedPack!.id)">Delete</button>
           </div>
         </div>
@@ -280,7 +357,7 @@ function startDrag(idx: number, e: PointerEvent) {
         <div class="create-content">
           <div class="form-group">
             <label>Pack Name</label>
-            <input type="text" v-model="editPack.name" placeholder="My Rule Pack" />
+            <input type="text" v-model="editPack.name" placeholder="My MemoPack" />
           </div>
           <div class="form-group">
             <label>Description</label>
@@ -504,6 +581,13 @@ function startDrag(idx: number, e: PointerEvent) {
         @click="currentTab = 'chat'"
       >
         Chat
+      </button>
+      <button
+        class="tab-btn"
+        :class="{ active: currentTab === 'archives' }"
+        @click="currentTab = 'archives'; loadArchives()"
+      >
+        Archives
       </button>
       <button
         class="tab-btn"

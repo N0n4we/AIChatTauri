@@ -14,19 +14,12 @@ export interface Channel {
   description: string;
 }
 
-export interface PublishRulePackReq {
+export interface PublishMemoPackReq {
   name: string;
   description: string;
   version: string;
   system_prompt: string;
   rules: { title: string; update_rule: string }[];
-  tags: string[];
-}
-
-export interface PublishMemoPackReq {
-  name: string;
-  description: string;
-  version: string;
   memos: { title: string; content: string }[];
   tags: string[];
 }
@@ -78,21 +71,8 @@ export async function getMe(baseUrl: string, token: string): Promise<UserInfo> {
   return request(baseUrl, "GET", "/api/me", undefined, token);
 }
 
-export async function publishRulePack(baseUrl: string, token: string, req: PublishRulePackReq): Promise<unknown> {
-  return request(baseUrl, "POST", "/api/rule-packs", req, token);
-}
-
 export async function publishMemoPack(baseUrl: string, token: string, req: PublishMemoPackReq): Promise<unknown> {
   return request(baseUrl, "POST", "/api/memo-packs", req, token);
-}
-
-export async function listRulePacks(baseUrl: string, params: { search?: string; tag?: string; page?: number; limit?: number } = {}): Promise<ListResponse<unknown>> {
-  const p = new URLSearchParams();
-  if (params.search) p.set("search", params.search);
-  if (params.tag) p.set("tag", params.tag);
-  p.set("page", String(params.page || 1));
-  if (params.limit) p.set("limit", String(params.limit));
-  return request(baseUrl, "GET", `/api/rule-packs?${p}`);
 }
 
 export async function listMemoPacks(baseUrl: string, params: { search?: string; tag?: string; page?: number; limit?: number } = {}): Promise<ListResponse<unknown>> {

@@ -3,8 +3,8 @@ import { invoke } from "@tauri-apps/api/core";
 import {
   type Channel,
   fetchServerInfo, registerOnServer,
-  publishRulePack as apiPublishRulePack,
-  listRulePacks as apiListRulePacks,
+  publishMemoPack as apiPublishMemoPack,
+  listMemoPacks as apiListMemoPacks,
 } from "./api";
 
 export interface MemoRule {
@@ -17,7 +17,7 @@ export interface Memo {
   content: string;
 }
 
-export interface RulePack {
+export interface MemoPack {
   id: string;
   name: string;
   description: string;
@@ -41,7 +41,7 @@ function nowISO() {
   return new Date().toISOString().slice(0, 19);
 }
 
-function toBackend(pack: RulePack) {
+function toBackend(pack: MemoPack) {
   return {
     id: pack.id,
     name: pack.name,
@@ -57,7 +57,7 @@ function toBackend(pack: RulePack) {
   };
 }
 
-function fromBackend(raw: any): RulePack {
+function fromBackend(raw: any): MemoPack {
   return {
     id: raw.id,
     name: raw.name,
@@ -65,7 +65,7 @@ function fromBackend(raw: any): RulePack {
     author: raw.author || raw.author_name || "",
     version: raw.version,
     systemPrompt: raw.system_prompt || "",
-    rules: (raw.rules || []).map((r: any) => ({ title: r.title, updateRule: r.update_rule || r.updateRule })),
+    rules: (raw.rules || []).map((r: any) => ({ title: r.title || r.description, updateRule: r.update_rule || r.updateRule })),
     memos: (raw.memos || []).map((m: any) => ({ title: m.title, content: m.content })),
     tags: raw.tags || [],
     createdAt: raw.created_at || "",
@@ -74,15 +74,14 @@ function fromBackend(raw: any): RulePack {
 }
 
 export function useMarket() {
-  const packs = ref<RulePack[]>([]);
-  const installedIds = ref<string[]>([]);
+  const packs = ref<MemoPack[]>([]);
   const currentView = ref<MarketView>("browse");
-  const selectedPack = ref<RulePack | null>(null);
+  const selectedPack = ref<MemoPack | null>(null);
   const searchQuery = ref("");
   const filterTag = ref("");
 
   // Create/Edit form
-  const editPack = ref<RulePack>({
+  const editPack = ref<MemoPack>({
     id: "", name: "", description: "", author: "", version: "1.0.0",
     systemPrompt: "", rules: [], memos: [], tags: [], createdAt: "", updatedAt: "",
   });
@@ -102,13 +101,12 @@ export function useMarket() {
 
   // Local / Remote toggle
   const viewMode = ref<"local" | "remote">("local");
-  const remotePacks = ref<RulePack[]>([]);
+  const remotePacks = ref<MemoPack[]>([]);
   const loadingRemote = ref(false);
 
   onMounted(() => {
     loadConfig();
     loadPacks();
-    loadInstalled();
   });
 
   async function loadConfig() {
@@ -142,8 +140,6 @@ export function useMarket() {
         compact_model_id?: string;
         reasoning_enabled?: boolean;
         compact_reasoning_enabled?: boolean;
-        system_prompt?: string;
-        active_pack_id?: string;
       }>("load_config");
 
       await invoke("save_config", {
@@ -153,9 +149,7 @@ export function useMarket() {
         compactModelId: existingConfig?.compact_model_id || "",
         reasoningEnabled: existingConfig?.reasoning_enabled || false,
         compactReasoningEnabled: existingConfig?.compact_reasoning_enabled || false,
-        systemPrompt: existingConfig?.system_prompt || "",
         channelsJson: JSON.stringify(channels.value),
-        activePackId: existingConfig?.active_pack_id || "",
       });
     } catch (e) {
       console.error("Failed to save config:", e);
@@ -174,16 +168,7 @@ export function useMarket() {
     }
   }
 
-  async function loadInstalled() {
-    try {
-      const ids = await invoke<string[]>("load_installed");
-      installedIds.value = ids || [];
-    } catch (e) {
-      console.error("Failed to load installed:", e);
-    }
-  }
-
-  async function savePack(pack: RulePack) {
+  async function savePack(pack: MemoPack) {
     try {
       await invoke("save_pack", { pack: toBackend(pack) });
       await loadPacks();
@@ -195,8 +180,6 @@ export function useMarket() {
   async function deletePack(id: string) {
     try {
       await invoke("delete_pack", { id });
-      installedIds.value = installedIds.value.filter(i => i !== id);
-      await invoke("save_installed", { ids: installedIds.value });
       if (selectedPack.value?.id === id) {
         selectedPack.value = null;
         currentView.value = "browse";
@@ -207,15 +190,12 @@ export function useMarket() {
     }
   }
 
-  function toggleInstall(id: string) {
-    if (installedIds.value.includes(id)) {
-      installedIds.value = installedIds.value.filter(i => i !== id);
-    } else {
-      installedIds.value.push(id);
+  async function installPack(pack: MemoPack) {
+    try {
+      await invoke("save_current_pack", { pack: toBackend(pack) });
+    } catch (e) {
+      console.error("Failed to install pack:", e);
     }
-    invoke("save_installed", { ids: installedIds.value }).catch(e =>
-      console.error("Failed to save installed:", e)
-    );
   }
 
   const filteredPacks = computed(() => {
@@ -250,7 +230,7 @@ export function useMarket() {
     currentView.value = "create";
   }
 
-  function startEdit(pack: RulePack) {
+  function startEdit(pack: MemoPack) {
     editPack.value = JSON.parse(JSON.stringify(pack));
     currentView.value = "create";
   }
@@ -288,7 +268,7 @@ export function useMarket() {
     currentView.value = "browse";
   }
 
-  function viewPack(pack: RulePack) {
+  function viewPack(pack: MemoPack) {
     selectedPack.value = pack;
     currentView.value = "detail";
   }
@@ -299,7 +279,7 @@ export function useMarket() {
   }
 
   // Export pack to a directory chosen by user
-  async function exportPack(pack: RulePack) {
+  async function exportPack(pack: MemoPack) {
     try {
       const json = JSON.stringify(toBackend(pack), null, 2);
       const filename = `${pack.name.replace(/\s+/g, "-").toLowerCase() || "pack"}.memomarket.json`;
@@ -312,7 +292,7 @@ export function useMarket() {
   // Import from MemoChat (reads current memo-pack.json from MemoChat)
   async function importFromMemoChat() {
     try {
-      const pack = await invoke<RulePack>("import_from_memochat");
+      const pack = await invoke<MemoPack>("import_from_memochat");
       await savePack(pack);
       await loadPacks();
     } catch (e) {
@@ -337,7 +317,7 @@ export function useMarket() {
         if (data.rules && data.systemPrompt !== undefined && !data.id) {
           // MemoChat format
           const now = nowISO();
-          const pack: RulePack = {
+          const pack: MemoPack = {
             id: generateId(),
             name: file.name.replace(/\.json$/, "").replace(/-/g, " "),
             description: "Imported from MemoChat",
@@ -375,7 +355,7 @@ export function useMarket() {
     try {
       const results = await Promise.allSettled(
         channels.value.map(async (ch) => {
-          const res = await apiListRulePacks(ch.url, { limit: 100 });
+          const res = await apiListMemoPacks(ch.url, { limit: 100 });
           return (res.items || []).map((raw: any) => ({
             ...fromBackend(raw),
             _channelName: ch.name,
@@ -383,7 +363,7 @@ export function useMarket() {
           }));
         })
       );
-      const all: RulePack[] = [];
+      const all: MemoPack[] = [];
       for (const r of results) {
         if (r.status === "fulfilled") all.push(...r.value);
       }
@@ -458,7 +438,7 @@ export function useMarket() {
     }
   }
 
-  async function publishPack(pack: RulePack) {
+  async function publishPack(pack: MemoPack) {
     const ch = selectedChannel.value;
     if (!ch) {
       publishError.value = "Select a channel first";
@@ -472,12 +452,13 @@ export function useMarket() {
     publishError.value = "";
     publishSuccess.value = "";
     try {
-      await apiPublishRulePack(ch.url, ch.token, {
+      await apiPublishMemoPack(ch.url, ch.token, {
         name: pack.name,
         description: pack.description,
         version: pack.version,
         system_prompt: pack.systemPrompt,
         rules: pack.rules.map(r => ({ title: r.title, update_rule: r.updateRule })),
+        memos: pack.memos.map(m => ({ title: m.title, content: m.content })),
         tags: pack.tags,
       });
       publishSuccess.value = `"${pack.name}" published to ${ch.name}!`;
@@ -488,7 +469,7 @@ export function useMarket() {
     }
   }
 
-  function openPublish(pack: RulePack) {
+  function openPublish(pack: MemoPack) {
     selectedPack.value = pack;
     publishError.value = "";
     publishSuccess.value = "";
@@ -496,10 +477,10 @@ export function useMarket() {
   }
 
   return {
-    packs, installedIds, currentView, selectedPack, searchQuery, filterTag,
+    packs, currentView, selectedPack, searchQuery, filterTag,
     filteredPacks, allTags,
     editPack,
-    loadPacks, savePack, deletePack, toggleInstall,
+    loadPacks, savePack, deletePack, installPack,
     startCreate, startEdit, addRule, removeRule, addMemo, removeMemo, addTag, removeTag,
     saveCurrentPack, viewPack, goBack,
     exportPack, importPack, importFromMemoChat,

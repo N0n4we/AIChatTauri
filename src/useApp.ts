@@ -27,7 +27,20 @@ export interface Memo {
   content: string;
 }
 
-export type TabType = "chat" | "market" | "settings";
+export type TabType = "chat" | "archives" | "market" | "settings";
+
+export interface ChatSession {
+  id: string;
+  title: string;
+  message_count: number;
+  created_at: string;
+}
+
+export interface ArchiveEntry {
+  filename: string;
+  message_count: number;
+  created_at: string;
+}
 
 export function useApp() {
   const currentTab = ref<TabType>("chat");
@@ -59,6 +72,11 @@ export function useApp() {
   const compactTotal = ref(0);
   const clearing = ref(false);
   const clearingHeight = ref(0);
+  const sessions = ref<ChatSession[]>([]);
+  const currentSessionId = ref<string | null>(null);
+  const archives = ref<ArchiveEntry[]>([]);
+  const selectedArchive = ref<string | null>(null);
+  const archiveMessages = ref<Message[]>([]);
 
   let scrollRAF: number | null = null;
   let resizeRAF: number | null = null;
@@ -78,6 +96,7 @@ export function useApp() {
     loadConfig();
     loadMemoPack();
     loadChatHistory();
+    loadSessions();
     window.addEventListener("resize", forceRepaint);
   });
 
@@ -124,7 +143,7 @@ export function useApp() {
 
   async function loadConfig() {
     try {
-      const config = await invoke<{ api_key: string; model_id: string; base_url: string; compact_model_id: string; reasoning_enabled: boolean; compact_reasoning_enabled: boolean; system_prompt: string }>("load_config");
+      const config = await invoke<{ api_key: string; model_id: string; base_url: string; compact_model_id: string; reasoning_enabled: boolean; compact_reasoning_enabled: boolean }>("load_config");
       if (config) {
         apiKey.value = config.api_key;
         if (config.model_id) modelId.value = config.model_id;
@@ -132,7 +151,6 @@ export function useApp() {
         if (config.compact_model_id) compactModelId.value = config.compact_model_id;
         reasoningEnabled.value = config.reasoning_enabled;
         compactReasoningEnabled.value = config.compact_reasoning_enabled;
-        systemPrompt.value = config.system_prompt || "";
       }
     } catch (e) {
       console.error("Failed to load config:", e);
@@ -141,8 +159,7 @@ export function useApp() {
 
   async function saveConfig() {
     try {
-      // Load existing config to preserve channelsJson and activePackId
-      const existingConfig = await invoke<{ channels_json?: string; active_pack_id?: string }>("load_config");
+      const existingConfig = await invoke<{ channels_json?: string }>("load_config");
 
       await invoke("save_config", {
         apiKey: apiKey.value,
@@ -151,16 +168,14 @@ export function useApp() {
         compactModelId: compactModelId.value,
         reasoningEnabled: reasoningEnabled.value,
         compactReasoningEnabled: compactReasoningEnabled.value,
-        systemPrompt: systemPrompt.value,
         channelsJson: existingConfig?.channels_json || "",
-        activePackId: existingConfig?.active_pack_id || "",
       });
     } catch (e) {
       console.error("Failed to save config:", e);
     }
   }
 
-  watch([apiKey, modelId, baseUrl, compactModelId, reasoningEnabled, compactReasoningEnabled, systemPrompt], () => {
+  watch([apiKey, modelId, baseUrl, compactModelId, reasoningEnabled, compactReasoningEnabled], () => {
     saveConfig();
   }, { deep: true });
 
@@ -178,22 +193,14 @@ export function useApp() {
   async function loadMemoPack() {
     try {
       const pack = await invoke<{
-        id: string;
-        name: string;
-        description: string;
-        author: string;
-        version: string;
         system_prompt: string;
-        rules: { description: string; update_rule: string }[];
+        rules: { title: string; update_rule: string }[];
         memos: { title: string; content: string }[];
-        tags: string[];
-        created_at: string;
-        updated_at: string;
-      } | null>("get_active_pack");
+      } | null>("load_current_pack");
 
       if (pack) {
         if (pack.rules && pack.rules.length > 0) {
-          memoRules.value = pack.rules.map(r => ({ id: nextRuleId(), title: r.description, updateRule: r.update_rule, expanded: false }));
+          memoRules.value = pack.rules.map(r => ({ id: nextRuleId(), title: r.title, updateRule: r.update_rule, expanded: false }));
         }
         if (pack.memos && pack.memos.length > 0) {
           memos.value = pack.memos;
@@ -209,43 +216,37 @@ export function useApp() {
 
   async function saveMemoPack() {
     try {
-      // Get current active pack or create a new one
-      const existingPack = await invoke<{
+      const existing = await invoke<{
         id: string;
         name: string;
         description: string;
         author: string;
         version: string;
-        system_prompt: string;
-        rules: { description: string; update_rule: string }[];
-        memos: { title: string; content: string }[];
         tags: string[];
         created_at: string;
-        updated_at: string;
-      } | null>("get_active_pack");
+      } | null>("load_current_pack");
 
       const pack = {
-        id: existingPack?.id || `pack_${Date.now()}`,
-        name: existingPack?.name || "My Pack",
-        description: existingPack?.description || "",
-        author: existingPack?.author || "",
-        version: existingPack?.version || "1.0.0",
+        id: existing?.id || `pack_${Date.now()}`,
+        name: existing?.name || "My Pack",
+        description: existing?.description || "",
+        author: existing?.author || "",
+        version: existing?.version || "1.0.0",
         system_prompt: systemPrompt.value,
-        rules: memoRules.value.map(m => ({ description: m.title, update_rule: m.updateRule })),
+        rules: memoRules.value.map(m => ({ title: m.title, update_rule: m.updateRule })),
         memos: memos.value,
-        tags: existingPack?.tags || [],
-        created_at: existingPack?.created_at || new Date().toISOString(),
+        tags: existing?.tags || [],
+        created_at: existing?.created_at || new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
 
-      await invoke("save_pack", { pack });
-      await invoke("set_active_pack", { packId: pack.id });
+      await invoke("save_current_pack", { pack });
     } catch (e) {
       console.error("Failed to save memo pack:", e);
     }
   }
 
-  watch([memoRules, memos], () => {
+  watch([memoRules, memos, systemPrompt], () => {
     saveMemoPack();
   }, { deep: true });
 
@@ -322,6 +323,113 @@ export function useApp() {
       messages.value = [];
       clearing.value = false;
     }, 600);
+  }
+
+  function generateSessionId() {
+    return `session_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  function getSessionTitle(): string {
+    const firstUser = messages.value.find(m => m.role === "user");
+    if (firstUser) return firstUser.content.slice(0, 30);
+    return "New Chat";
+  }
+
+  async function loadSessions() {
+    try {
+      sessions.value = await invoke<ChatSession[]>("list_chat_sessions");
+    } catch (e) {
+      console.error("Failed to load sessions:", e);
+    }
+  }
+
+  async function saveCurrentSession() {
+    if (messages.value.length === 0) return;
+    if (!currentSessionId.value) currentSessionId.value = generateSessionId();
+    try {
+      await invoke("save_chat_session", {
+        id: currentSessionId.value,
+        title: getSessionTitle(),
+        messages: messages.value,
+      });
+      await loadSessions();
+    } catch (e) {
+      console.error("Failed to save session:", e);
+    }
+  }
+
+  async function switchSession(id: string) {
+    if (id === currentSessionId.value) return;
+    await saveCurrentSession();
+    try {
+      const loaded = await invoke<Message[]>("load_chat_session", { id });
+      messages.value = loaded;
+      currentSessionId.value = id;
+    } catch (e) {
+      console.error("Failed to load session:", e);
+    }
+  }
+
+  async function deleteSession(id: string) {
+    try {
+      await invoke("delete_chat_session", { id });
+      if (currentSessionId.value === id) {
+        currentSessionId.value = null;
+        messages.value = [];
+      }
+      await loadSessions();
+    } catch (e) {
+      console.error("Failed to delete session:", e);
+    }
+  }
+
+  async function newChat() {
+    if (messages.value.length === 0 && !currentSessionId.value) return;
+    await saveCurrentSession();
+    const container = messagesContainerRef.value;
+    if (!container || messages.value.length === 0) {
+      messages.value = [];
+      currentSessionId.value = generateSessionId();
+      return;
+    }
+    clearingHeight.value = container.clientHeight;
+    clearing.value = true;
+    nextTick(() => {
+      const spacer = container.querySelector(".clearing-spacer") as HTMLElement | null;
+      if (spacer) {
+        const containerRect = container.getBoundingClientRect();
+        const spacerRect = spacer.getBoundingClientRect();
+        const targetScroll = container.scrollTop + (spacerRect.top - containerRect.top);
+        container.scrollTo({ top: targetScroll, behavior: "smooth" });
+      }
+    });
+    setTimeout(() => {
+      messages.value = [];
+      clearing.value = false;
+      currentSessionId.value = generateSessionId();
+    }, 600);
+  }
+
+  async function loadArchives() {
+    try {
+      archives.value = await invoke<ArchiveEntry[]>("list_archives");
+    } catch (e) {
+      console.error("Failed to load archives:", e);
+    }
+  }
+
+  async function openArchive(filename: string) {
+    try {
+      archiveMessages.value = await invoke<Message[]>("load_archive", { filename });
+      selectedArchive.value = filename;
+    } catch (e) {
+      console.error("Failed to load archive:", e);
+    }
+  }
+
+  function closeArchive() {
+    selectedArchive.value = null;
+    archiveMessages.value = [];
   }
 
   function buildSystemMessage(history: { role: string; content: string }[]) {
@@ -467,6 +575,15 @@ export function useApp() {
 
   const renderedMessages = computed(() =>
     messages.value.map(m => ({
+      role: m.role,
+      html: highlightMarkdown(m.content),
+      content: m.content,
+      reasoning: m.reasoning || "",
+    }))
+  );
+
+  const renderedArchiveMessages = computed(() =>
+    archiveMessages.value.map(m => ({
       role: m.role,
       html: highlightMarkdown(m.content),
       content: m.content,
@@ -723,15 +840,20 @@ Output ONLY the updated memo content as plain text (no JSON, no wrapping). If th
 
   return {
     currentTab,
-    messages, renderedMessages, input, loading,
+    messages, renderedMessages, renderedArchiveMessages, input, loading,
     apiKey, modelId, compactModelId, baseUrl, reasoningEnabled, compactReasoningEnabled, systemPrompt,
     messagesEndRef, messagesContainerRef, inputRef,
     memoState, memoContentVisible, memoRules, memos, compacting, compactProgress, compactTotal, clearing, clearingHeight,
+    sessions, currentSessionId,
+    archives, selectedArchive, archiveMessages,
     memoBtnRef, memoPanelRef, memoTitleRef,
     memoBtnRect, memoTitleRect,
     openMemo, closeMemo, addMemoRule, toggleMemoRule, removeMemoRule, reorderMemoRule,
     clearMessages, updateMessage,
     sendMessage, regenerate, memoryCompact,
+    newChat, saveCurrentSession, switchSession, deleteSession, loadSessions,
+    loadArchives, openArchive, closeArchive,
     exportMemos, importMemos, exportRules, importRules,
+    loadMemoPack,
   };
 }
