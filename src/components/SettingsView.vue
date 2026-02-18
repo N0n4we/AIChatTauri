@@ -10,7 +10,9 @@ defineProps<{
   compactReasoningEnabled: boolean;
   channels: Channel[];
   newChannelUrl: string;
-  newChannelToken: string;
+  newChannelUsername: string;
+  newChannelPassword: string;
+  newChannelIsLogin: boolean;
   addingChannel: boolean;
   addChannelError: string;
 }>();
@@ -23,7 +25,9 @@ const emit = defineEmits<{
   (e: "update:reasoningEnabled", v: boolean): void;
   (e: "update:compactReasoningEnabled", v: boolean): void;
   (e: "update:newChannelUrl", v: string): void;
-  (e: "update:newChannelToken", v: string): void;
+  (e: "update:newChannelUsername", v: string): void;
+  (e: "update:newChannelPassword", v: string): void;
+  (e: "update:newChannelIsLogin", v: boolean): void;
   (e: "addChannel"): void;
   (e: "removeChannel", id: string): void;
 }>();
@@ -76,13 +80,23 @@ const emit = defineEmits<{
           <label>Server URL</label>
           <input type="text" :value="newChannelUrl"
             @input="emit('update:newChannelUrl', ($event.target as HTMLInputElement).value)"
-            placeholder="http://localhost:8080" @keydown.enter="emit('addChannel')" />
+            placeholder="https://n0n4w3.cn:8080" @keydown.enter="emit('addChannel')" />
+        </div>
+        <div class="auth-toggle">
+          <button class="auth-toggle-btn" :class="{ active: !newChannelIsLogin }" @click="emit('update:newChannelIsLogin', false)">Register</button>
+          <button class="auth-toggle-btn" :class="{ active: newChannelIsLogin }" @click="emit('update:newChannelIsLogin', true)">Login</button>
         </div>
         <div class="form-group">
-          <label>Auth Token (optional)</label>
-          <input type="password" :value="newChannelToken"
-            @input="emit('update:newChannelToken', ($event.target as HTMLInputElement).value)"
-            placeholder="Token if you already have one" />
+          <label>Username</label>
+          <input type="text" :value="newChannelUsername"
+            @input="emit('update:newChannelUsername', ($event.target as HTMLInputElement).value)"
+            placeholder="username" />
+        </div>
+        <div class="form-group">
+          <label>Password</label>
+          <input type="password" :value="newChannelPassword"
+            @input="emit('update:newChannelPassword', ($event.target as HTMLInputElement).value)"
+            placeholder="password" />
         </div>
         <div v-if="addChannelError" class="publish-msg error">{{ addChannelError }}</div>
         <button class="action-btn primary" @click="emit('addChannel')" :disabled="addingChannel || !newChannelUrl.trim()">
@@ -102,8 +116,8 @@ const emit = defineEmits<{
           <p class="channel-card-url">{{ ch.url }}</p>
           <p v-if="ch.description" class="channel-card-desc">{{ ch.description }}</p>
           <div class="channel-card-token">
-            <span v-if="ch.token" class="token-ok">Authenticated</span>
-            <span v-else class="token-missing">No token</span>
+            <span v-if="ch.token" class="token-ok">{{ ch.username || 'Authenticated' }}</span>
+            <span v-else class="token-missing">Not logged in</span>
           </div>
         </div>
       </div>
@@ -144,6 +158,9 @@ const emit = defineEmits<{
   background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 10px; padding: 16px; margin-bottom: 16px;
 }
+.auth-toggle { display: flex; gap: 0; margin-bottom: 14px; border-radius: 8px; overflow: hidden; border: 1px solid rgba(255, 255, 255, 0.15); }
+.auth-toggle-btn { flex: 1; padding: 8px; border: none; background: transparent; color: #888; font-size: 0.8rem; cursor: pointer; font-family: inherit; font-weight: 500; transition: all 150ms ease; }
+.auth-toggle-btn.active { background: #777aff; color: white; }
 .channel-list { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
 .channel-card {
   background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1);

@@ -37,9 +37,10 @@ const {
   viewMode, loadingRemote,
   channels, selectedChannelId, selectedChannel,
   publishing, publishError, publishSuccess,
-  newChannelUrl, newChannelToken, addingChannel, addChannelError,
-  addChannel, removeChannel, updateChannelToken, registerOnChannel,
+  newChannelUrl, newChannelUsername, newChannelPassword, newChannelIsLogin, addingChannel, addChannelError,
+  addChannel, removeChannel, updateChannelToken, registerOnChannel, loginOnChannel,
   publishPack, openPublish, installPack, deletePack,
+  deleteRemotePack,
 } = useMarket();
 
 // Provide refs for child components to bind
@@ -50,7 +51,10 @@ provide("memoPanelRef", memoPanelRef);
 provide("memoTitleRef", memoTitleRef);
 
 const regUsername = ref("");
-const regDisplayName = ref("");
+const regPassword = ref("");
+const isLoginMode = ref(false);
+const installing = ref(false);
+const installSuccess = ref(false);
 const historyOpen = ref(false);
 const historyDropdownRef = ref<HTMLDivElement | null>(null);
 
@@ -73,8 +77,14 @@ function formatDate(iso: string) {
 }
 
 function handleRegister() {
-  if (regUsername.value.trim() && selectedChannelId.value) {
-    registerOnChannel(selectedChannelId.value, regUsername.value.trim(), regDisplayName.value.trim() || regUsername.value.trim());
+  if (regUsername.value.trim() && regPassword.value && selectedChannelId.value) {
+    registerOnChannel(selectedChannelId.value, regUsername.value.trim(), regPassword.value);
+  }
+}
+
+function handleLogin() {
+  if (regUsername.value.trim() && regPassword.value && selectedChannelId.value) {
+    loginOnChannel(selectedChannelId.value, regUsername.value.trim(), regPassword.value);
   }
 }
 
@@ -82,8 +92,17 @@ function onTabChange(tab: string) {
   if (tab === "archives") loadArchives();
 }
 
-function onInstallPack(pack: any) {
-  installPack(pack).then(() => loadMemoPack());
+async function onInstallPack(pack: any) {
+  installing.value = true;
+  installSuccess.value = false;
+  try {
+    await installPack(pack);
+    await loadMemoPack();
+    installSuccess.value = true;
+    setTimeout(() => { installSuccess.value = false; }, 1500);
+  } finally {
+    installing.value = false;
+  }
 }
 
 onMounted(() => document.addEventListener("mousedown", onHistoryClickOutside));
@@ -153,6 +172,8 @@ onUnmounted(() => document.removeEventListener("mousedown", onHistoryClickOutsid
       :editPack="editPack"
       :viewMode="viewMode"
       :loadingRemote="loadingRemote"
+      :installing="installing"
+      :installSuccess="installSuccess"
       :packs="packs"
       :channels="channels"
       :selectedChannelId="selectedChannelId"
@@ -161,12 +182,14 @@ onUnmounted(() => document.removeEventListener("mousedown", onHistoryClickOutsid
       :publishError="publishError"
       :publishSuccess="publishSuccess"
       :regUsername="regUsername"
-      :regDisplayName="regDisplayName"
+      :regPassword="regPassword"
+      :isLoginMode="isLoginMode"
       @update:searchQuery="searchQuery = $event"
       @update:viewMode="viewMode = $event"
       @update:selectedChannelId="selectedChannelId = $event"
       @update:regUsername="regUsername = $event"
-      @update:regDisplayName="regDisplayName = $event"
+      @update:regPassword="regPassword = $event"
+      @update:isLoginMode="isLoginMode = $event"
       @importPack="importPack"
       @importFromChat="importFromMemoChat"
       @startCreate="startCreate"
@@ -177,6 +200,7 @@ onUnmounted(() => document.removeEventListener("mousedown", onHistoryClickOutsid
       @startEdit="startEdit"
       @installPack="onInstallPack"
       @deletePack="deletePack"
+      @deleteRemotePack="deleteRemotePack"
       @saveCurrentPack="saveCurrentPack"
       @addRule="addRule"
       @removeRule="removeRule"
@@ -185,6 +209,7 @@ onUnmounted(() => document.removeEventListener("mousedown", onHistoryClickOutsid
       @publishPack="publishPack"
       @updateChannelToken="updateChannelToken"
       @handleRegister="handleRegister"
+      @handleLogin="handleLogin"
     />
 
     <SettingsView
@@ -197,7 +222,9 @@ onUnmounted(() => document.removeEventListener("mousedown", onHistoryClickOutsid
       :compactReasoningEnabled="compactReasoningEnabled"
       :channels="channels"
       :newChannelUrl="newChannelUrl"
-      :newChannelToken="newChannelToken"
+      :newChannelUsername="newChannelUsername"
+      :newChannelPassword="newChannelPassword"
+      :newChannelIsLogin="newChannelIsLogin"
       :addingChannel="addingChannel"
       :addChannelError="addChannelError"
       @update:apiKey="apiKey = $event"
@@ -207,7 +234,9 @@ onUnmounted(() => document.removeEventListener("mousedown", onHistoryClickOutsid
       @update:reasoningEnabled="reasoningEnabled = $event"
       @update:compactReasoningEnabled="compactReasoningEnabled = $event"
       @update:newChannelUrl="newChannelUrl = $event"
-      @update:newChannelToken="newChannelToken = $event"
+      @update:newChannelUsername="newChannelUsername = $event"
+      @update:newChannelPassword="newChannelPassword = $event"
+      @update:newChannelIsLogin="newChannelIsLogin = $event"
       @addChannel="addChannel"
       @removeChannel="removeChannel"
     />

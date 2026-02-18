@@ -9,6 +9,8 @@ defineProps<{
   editPack: MemoPack;
   viewMode: "local" | "remote";
   loadingRemote: boolean;
+  installing: boolean;
+  installSuccess: boolean;
   packs: MemoPack[];
   channels: any[];
   selectedChannelId: string;
@@ -17,7 +19,8 @@ defineProps<{
   publishError: string;
   publishSuccess: string;
   regUsername: string;
-  regDisplayName: string;
+  regPassword: string;
+  isLoginMode: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -25,7 +28,8 @@ const emit = defineEmits<{
   (e: "update:viewMode", v: "local" | "remote"): void;
   (e: "update:selectedChannelId", v: string): void;
   (e: "update:regUsername", v: string): void;
-  (e: "update:regDisplayName", v: string): void;
+  (e: "update:regPassword", v: string): void;
+  (e: "update:isLoginMode", v: boolean): void;
   (e: "importPack"): void;
   (e: "importFromChat"): void;
   (e: "startCreate"): void;
@@ -36,6 +40,7 @@ const emit = defineEmits<{
   (e: "startEdit", pack: MemoPack): void;
   (e: "installPack", pack: MemoPack): void;
   (e: "deletePack", id: string): void;
+  (e: "deleteRemotePack", pack: MemoPack): void;
   (e: "saveCurrentPack"): void;
   (e: "addRule"): void;
   (e: "removeRule", idx: number): void;
@@ -44,6 +49,7 @@ const emit = defineEmits<{
   (e: "publishPack", pack: MemoPack): void;
   (e: "updateChannelToken", id: string, token: string): void;
   (e: "handleRegister"): void;
+  (e: "handleLogin"): void;
 }>();
 </script>
 
@@ -85,6 +91,7 @@ const emit = defineEmits<{
           <p class="pack-desc">{{ pack.description || 'No description' }}</p>
           <div class="pack-meta">
             <span v-if="(pack as any)._channelName" class="pack-channel-badge">{{ (pack as any)._channelName }}</span>
+            <span v-if="pack.authorName" class="pack-author">{{ pack.authorName }}</span>
             <span class="pack-rules-count">{{ pack.rules.length }} rules</span>
           </div>
         </div>
@@ -97,16 +104,21 @@ const emit = defineEmits<{
         <button class="back-btn" @click="emit('goBack')">&larr; Back</button>
         <div class="detail-actions">
           <button class="action-btn" @click="emit('exportPack', selectedPack!)">Export Pack</button>
-          <button class="action-btn publish-btn" @click="emit('openPublish', selectedPack!)">Publish</button>
-          <button class="action-btn" @click="emit('startEdit', selectedPack!)">Edit</button>
-          <button class="action-btn primary" @click="emit('installPack', selectedPack!)">Install</button>
-          <button class="action-btn danger" @click="emit('deletePack', selectedPack!.id)">Delete</button>
+          <button v-if="!(selectedPack as any)._channelUrl" class="action-btn publish-btn" @click="emit('openPublish', selectedPack!)">Publish</button>
+          <button v-if="!(selectedPack as any)._channelUrl" class="action-btn" @click="emit('startEdit', selectedPack!)">Edit</button>
+          <button class="action-btn primary install-btn" :class="{ success: installSuccess }" @click="emit('installPack', selectedPack!)" :disabled="installing || installSuccess">
+            {{ installSuccess ? 'OK' : installing ? 'Installing...' : 'Install' }}
+          </button>
+          <button v-if="(selectedPack as any)._channelUrl && (selectedPack as any)._channelUsername && selectedPack!.authorName === (selectedPack as any)._channelUsername" class="action-btn danger" @click="emit('deleteRemotePack', selectedPack!)">Delete Remote</button>
+          <button v-if="!(selectedPack as any)._channelUrl" class="action-btn danger" @click="emit('deletePack', selectedPack!.id)">Delete</button>
         </div>
       </div>
       <div class="detail-content">
         <h2>{{ selectedPack.name }}</h2>
         <p class="detail-desc">{{ selectedPack.description }}</p>
         <div class="detail-info">
+          <span v-if="selectedPack.authorName" class="detail-author">by {{ selectedPack.authorName }}</span>
+          <span v-if="(selectedPack as any)._channelName" class="pack-channel-badge">{{ (selectedPack as any)._channelName }}</span>
           <span>{{ selectedPack.rules.length }} rules</span>
         </div>
         <div v-if="selectedPack.systemPrompt" class="detail-section">
@@ -174,6 +186,7 @@ const emit = defineEmits<{
             <button v-for="ch in channels" :key="ch.id" class="channel-pill" :class="{ active: selectedChannelId === ch.id }" @click="emit('update:selectedChannelId', ch.id)">
               <span class="channel-pill-name">{{ ch.name }}</span>
               <span class="channel-pill-url">{{ ch.url }}</span>
+              <span v-if="ch.username" class="channel-pill-user">{{ ch.username }}</span>
             </button>
           </div>
         </div>
@@ -182,18 +195,20 @@ const emit = defineEmits<{
           <p v-if="selectedChannel.description" class="channel-desc">{{ selectedChannel.description }}</p>
           <p class="channel-url">{{ selectedChannel.url }}</p>
           <div v-if="!selectedChannel.token" class="register-section">
-            <p class="hint">No token for this channel. Register or paste a token:</p>
+            <p class="hint">No token for this channel. Paste a token:</p>
             <div class="form-group">
               <label>Token</label>
               <input type="password" :value="selectedChannel.token" @input="emit('updateChannelToken', selectedChannel!.id, ($event.target as HTMLInputElement).value)" placeholder="Paste auth token..." />
             </div>
             <div class="settings-divider"></div>
-            <p class="hint">Or register a new account:</p>
-            <div class="form-row">
-              <div class="form-group"><label>Username</label><input type="text" :value="regUsername" @input="emit('update:regUsername', ($event.target as HTMLInputElement).value)" placeholder="username" /></div>
-              <div class="form-group"><label>Display Name</label><input type="text" :value="regDisplayName" @input="emit('update:regDisplayName', ($event.target as HTMLInputElement).value)" placeholder="Your Name" /></div>
+            <div class="auth-toggle">
+              <button class="auth-toggle-btn" :class="{ active: !isLoginMode }" @click="emit('update:isLoginMode', false)">Register</button>
+              <button class="auth-toggle-btn" :class="{ active: isLoginMode }" @click="emit('update:isLoginMode', true)">Login</button>
             </div>
-            <button class="action-btn primary" @click="emit('handleRegister')" :disabled="!regUsername.trim()">Register</button>
+            <div class="form-group"><label>Username</label><input type="text" :value="regUsername" @input="emit('update:regUsername', ($event.target as HTMLInputElement).value)" placeholder="username" /></div>
+            <div class="form-group"><label>Password</label><input type="password" :value="regPassword" @input="emit('update:regPassword', ($event.target as HTMLInputElement).value)" placeholder="password" /></div>
+            <button v-if="isLoginMode" class="action-btn primary" @click="emit('handleLogin')" :disabled="!regUsername.trim() || !regPassword">Login</button>
+            <button v-else class="action-btn primary" @click="emit('handleRegister')" :disabled="!regUsername.trim() || !regPassword">Register</button>
           </div>
           <div v-else class="token-status"><span class="token-ok">Authenticated</span></div>
         </div>
@@ -256,6 +271,8 @@ const emit = defineEmits<{
 .pack-desc { font-size: 0.8rem; color: #999; margin-bottom: 8px; line-height: 1.4; }
 .pack-meta { display: flex; gap: 12px; font-size: 0.75rem; color: #666; margin-bottom: 6px; }
 .pack-channel-badge { padding: 1px 8px; background: rgba(119, 122, 255, 0.15); color: #777aff; border-radius: 8px; font-size: 0.7rem; }
+.pack-author { color: #999; font-size: 0.75rem; }
+.detail-author { color: #bbb; font-weight: 500; }
 .market-detail-view, .market-create-view, .market-publish-view { flex: 1; overflow-y: auto; padding: 16px; scrollbar-width: none; }
 .market-detail-view::-webkit-scrollbar, .market-create-view::-webkit-scrollbar, .market-publish-view::-webkit-scrollbar { display: none; }
 .detail-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 8px; }
@@ -271,6 +288,8 @@ const emit = defineEmits<{
 .action-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .action-btn.primary { background: #777aff; border-color: #777aff; color: white; }
 .action-btn.primary:hover { background: #6670ee; border-color: #6670ee; }
+.action-btn.primary.success { background: rgba(255, 255, 255, 0.06); border-color: rgba(255, 255, 255, 0.15); color: #999; cursor: not-allowed; opacity: 1; }
+.install-btn { min-width: 100px; text-align: center; }
 .action-btn.danger { color: #ff6b6b; border-color: rgba(255, 107, 107, 0.3); }
 .action-btn.danger:hover { background: rgba(255, 107, 107, 0.15); border-color: rgba(255, 107, 107, 0.5); }
 .detail-content h2 { font-size: 1.5rem; font-weight: 600; margin-bottom: 8px; }
@@ -312,10 +331,13 @@ const emit = defineEmits<{
 .publish-content h2 { font-size: 1.3rem; font-weight: 600; margin-bottom: 16px; }
 .publish-section { background: rgba(255, 255, 255, 0.05); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
 .publish-section h3 { font-size: 0.85rem; font-weight: 600; color: #999; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; }
-.publish-btn { background: #50c878 !important; color: #1a1a1a !important; }
+.publish-btn { background: #50c878 !important; color: #fff !important; }
 .publish-btn:hover { background: #45b06a !important; }
 .register-section { margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255, 255, 255, 0.1); }
 .register-section .hint { font-size: 0.8rem; color: #888; margin-bottom: 10px; }
+.auth-toggle { display: flex; gap: 0; margin-bottom: 14px; border-radius: 8px; overflow: hidden; border: 1px solid rgba(255, 255, 255, 0.15); }
+.auth-toggle-btn { flex: 1; padding: 8px; border: none; background: transparent; color: #888; font-size: 0.8rem; cursor: pointer; font-family: inherit; font-weight: 500; transition: all 150ms ease; }
+.auth-toggle-btn.active { background: #777aff; color: white; }
 .token-status { margin-top: 8px; }
 .token-ok { display: inline-block; padding: 3px 12px; background: rgba(80, 250, 123, 0.2); color: #50fa7b; border-radius: 12px; font-size: 0.75rem; font-weight: 500; }
 .channel-select { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
@@ -324,6 +346,7 @@ const emit = defineEmits<{
 .channel-pill.active { background: #777aff; border-color: #777aff; color: white; }
 .channel-pill-name { display: block; font-weight: 500; }
 .channel-pill-url { display: block; font-size: 0.7rem; opacity: 0.6; margin-top: 2px; }
+.channel-pill-user { display: block; font-size: 0.7rem; opacity: 0.8; margin-top: 2px; }
 .empty-channel { text-align: center; padding: 16px; color: #888; font-size: 0.85rem; }
 .empty-channel p { margin-bottom: 10px; }
 .channel-desc { font-size: 0.85rem; color: #999; margin-bottom: 6px; }

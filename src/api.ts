@@ -10,6 +10,7 @@ export interface Channel {
   id: string;       // local UUID
   url: string;      // backend server URL
   token: string;    // auth token for this server
+  username: string;  // authenticated username
   name: string;     // display name (fetched from server /api/info)
   description: string;
 }
@@ -32,7 +33,6 @@ export interface ListResponse<T> {
 export interface UserInfo {
   id: string;
   username: string;
-  display_name: string;
   token?: string;
   created_at: string;
 }
@@ -61,8 +61,12 @@ export async function fetchServerInfo(baseUrl: string): Promise<ServerInfo> {
   return request(baseUrl, "GET", "/api/info");
 }
 
-export async function registerOnServer(baseUrl: string, username: string, displayName: string): Promise<UserInfo> {
-  return request(baseUrl, "POST", "/api/register", { username, display_name: displayName });
+export async function registerOnServer(baseUrl: string, username: string, password: string): Promise<UserInfo> {
+  return request(baseUrl, "POST", "/api/register", { username, password });
+}
+
+export async function loginOnServer(baseUrl: string, username: string, password: string): Promise<UserInfo> {
+  return request(baseUrl, "POST", "/api/login", { username, password });
 }
 
 export async function getMe(baseUrl: string, token: string): Promise<UserInfo> {
@@ -80,4 +84,8 @@ export async function listMemoPacks(baseUrl: string, params: { search?: string; 
   p.set("page", String(params.page || 1));
   if (params.limit) p.set("limit", String(params.limit));
   return request(baseUrl, "GET", `/api/memo-packs?${p}`);
+}
+
+export async function deleteRemoteMemoPack(baseUrl: string, token: string, id: string): Promise<unknown> {
+  return request(baseUrl, "DELETE", `/api/memo-packs/${id}`, undefined, token);
 }

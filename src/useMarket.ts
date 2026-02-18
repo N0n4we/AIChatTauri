@@ -2,9 +2,10 @@ import { ref, computed, onMounted, watch } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import {
   type Channel,
-  fetchServerInfo, registerOnServer,
+  fetchServerInfo, registerOnServer, loginOnServer,
   publishMemoPack as apiPublishMemoPack,
   listMemoPacks as apiListMemoPacks,
+  deleteRemoteMemoPack as apiDeleteRemotePack,
 } from "./api";
 
 export interface MemoRule {
@@ -21,6 +22,8 @@ export interface MemoPack {
   id: string;
   name: string;
   description: string;
+  authorId: string;
+  authorName: string;
   systemPrompt: string;
   rules: MemoRule[];
   memos: Memo[];
@@ -56,6 +59,8 @@ function fromBackend(raw: any): MemoPack {
     id: raw.id,
     name: raw.name,
     description: raw.description,
+    authorId: raw.author_id || "",
+    authorName: raw.author_name || "",
     systemPrompt: raw.system_prompt || "",
     rules: (raw.rules || []).map((r: any) => ({ title: r.title || r.description, updateRule: r.update_rule || r.updateRule })),
     memos: (raw.memos || []).map((m: any) => ({ title: m.title, content: m.content })),
@@ -72,6 +77,7 @@ export function useMarket() {
 
   const editPack = ref<MemoPack>({
     id: "", name: "", description: "",
+    authorId: "", authorName: "",
     systemPrompt: "", rules: [], memos: [], createdAt: "", updatedAt: "",
   });
 
@@ -83,8 +89,10 @@ export function useMarket() {
   const publishSuccess = ref("");
 
   // New channel form
-  const newChannelUrl = ref("");
-  const newChannelToken = ref("");
+  const newChannelUrl = ref("https://n0n4w3.cn:8080");
+  const newChannelUsername = ref("");
+  const newChannelPassword = ref("");
+  const newChannelIsLogin = ref(false);
   const addingChannel = ref(false);
   const addChannelError = ref("");
 
@@ -146,7 +154,11 @@ export function useMarket() {
   }
 
   // Save channels when they change
-  watch(channels, () => { saveConfig(); }, { deep: true });
+  watch(channels, () => {
+    saveConfig();
+    // Refresh remote packs so stale tokens/usernames are cleared
+    if (viewMode.value === "remote") fetchRemotePacks();
+  }, { deep: true });
 
   async function loadPacks() {
     try {
@@ -199,7 +211,9 @@ export function useMarket() {
       const q = searchQuery.value.toLowerCase();
       result = result.filter(p =>
         p.name.toLowerCase().includes(q) ||
-        p.description.toLowerCase().includes(q)
+        p.description.toLowerCase().includes(q) ||
+        p.authorName.toLowerCase().includes(q) ||
+        ((p as any)._channelName || "").toLowerCase().includes(q)
       );
     }
     return result;
@@ -208,6 +222,7 @@ export function useMarket() {
   function startCreate() {
     editPack.value = {
       id: generateId(), name: "", description: "",
+      authorId: "", authorName: "",
       systemPrompt: "", rules: [], memos: [], createdAt: nowISO(), updatedAt: nowISO(),
     };
     currentView.value = "create";
@@ -270,6 +285,8 @@ export function useMarket() {
         id: generateId(),
         name: "",
         description: "",
+        authorId: "",
+        authorName: "",
         systemPrompt: raw.system_prompt || "",
         rules: (raw.rules || []).map((r: any) => ({ title: r.title || r.description, updateRule: r.update_rule || r.updateRule || "" })),
         memos: (raw.memos || []).map((m: any) => ({ title: m.title, content: m.content })),
@@ -303,6 +320,8 @@ export function useMarket() {
             id: generateId(),
             name: file.name.replace(/\.json$/, "").replace(/-/g, " "),
             description: "Imported from MemoChat",
+            authorId: "",
+            authorName: "",
             systemPrompt: data.systemPrompt || "",
             rules: (data.rules || []).map((r: any) => ({ title: r.title, updateRule: r.updateRule })),
             memos: [],
@@ -332,14 +351,28 @@ export function useMarket() {
     }
     loadingRemote.value = true;
     try {
+      // Group channels by URL to avoid duplicate fetches
+      const urlGroups = new Map<string, Channel[]>();
+      for (const ch of channels.value) {
+        const group = urlGroups.get(ch.url);
+        if (group) group.push(ch);
+        else urlGroups.set(ch.url, [ch]);
+      }
       const results = await Promise.allSettled(
-        channels.value.map(async (ch) => {
-          const res = await apiListMemoPacks(ch.url, { limit: 100 });
-          return (res.items || []).map((raw: any) => ({
-            ...fromBackend(raw),
-            _channelName: ch.name,
-            _channelUrl: ch.url,
-          }));
+        Array.from(urlGroups.entries()).map(async ([url, chs]) => {
+          const res = await apiListMemoPacks(url, { limit: 100 });
+          return (res.items || []).map((raw: any) => {
+            const pack = fromBackend(raw);
+            // Match pack author to the correct channel account
+            const matched = chs.find(c => c.username === pack.authorName) || chs[0];
+            return {
+              ...pack,
+              _channelName: matched.name,
+              _channelUrl: matched.url,
+              _channelToken: matched.token,
+              _channelUsername: matched.username,
+            };
+          });
         })
       );
       const all: MemoPack[] = [];
@@ -371,12 +404,22 @@ export function useMarket() {
     addingChannel.value = true;
     addChannelError.value = "";
     try {
-      // Fetch server info to get name
       const info = await fetchServerInfo(url);
+      let token = "";
+      let username = "";
+      const user = newChannelUsername.value.trim();
+      const pass = newChannelPassword.value;
+      if (user && pass) {
+        const authFn = newChannelIsLogin.value ? loginOnServer : registerOnServer;
+        const result = await authFn(url, user, pass);
+        token = result.token || "";
+        username = result.username || user;
+      }
       const ch: Channel = {
         id: `ch_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
         url,
-        token: newChannelToken.value.trim(),
+        token,
+        username,
         name: info.name || url,
         description: info.description || "",
       };
@@ -385,7 +428,8 @@ export function useMarket() {
         selectedChannelId.value = ch.id;
       }
       newChannelUrl.value = "";
-      newChannelToken.value = "";
+      newChannelUsername.value = "";
+      newChannelPassword.value = "";
     } catch (e: any) {
       addChannelError.value = e.message || "Failed to connect to server";
     } finally {
@@ -405,15 +449,29 @@ export function useMarket() {
     if (ch) ch.token = token;
   }
 
-  async function registerOnChannel(channelId: string, username: string, displayName: string) {
+  async function registerOnChannel(channelId: string, username: string, password: string) {
     const ch = channels.value.find(c => c.id === channelId);
     if (!ch) return;
     publishError.value = "";
     try {
-      const user = await registerOnServer(ch.url, username, displayName);
+      const user = await registerOnServer(ch.url, username, password);
       ch.token = user.token || "";
+      ch.username = user.username || username;
     } catch (e: any) {
       publishError.value = e.message || "Registration failed";
+    }
+  }
+
+  async function loginOnChannel(channelId: string, username: string, password: string) {
+    const ch = channels.value.find(c => c.id === channelId);
+    if (!ch) return;
+    publishError.value = "";
+    try {
+      const user = await loginOnServer(ch.url, username, password);
+      ch.token = user.token || "";
+      ch.username = user.username || username;
+    } catch (e: any) {
+      publishError.value = e.message || "Login failed";
     }
   }
 
@@ -453,6 +511,21 @@ export function useMarket() {
     currentView.value = "publish";
   }
 
+  async function deleteRemotePack(pack: MemoPack) {
+    const p = pack as any;
+    if (!p._channelUrl || !p._channelToken) return;
+    try {
+      await apiDeleteRemotePack(p._channelUrl, p._channelToken, pack.id);
+      remotePacks.value = remotePacks.value.filter(rp => rp.id !== pack.id);
+      if (selectedPack.value?.id === pack.id) {
+        selectedPack.value = null;
+        currentView.value = "browse";
+      }
+    } catch (e: any) {
+      publishError.value = e.message || "Failed to delete remote pack";
+    }
+  }
+
   return {
     packs, currentView, selectedPack, searchQuery,
     filteredPacks,
@@ -466,8 +539,9 @@ export function useMarket() {
     // Channels (each = a backend server)
     channels, selectedChannelId, selectedChannel,
     publishing, publishError, publishSuccess,
-    newChannelUrl, newChannelToken, addingChannel, addChannelError,
-    addChannel, removeChannel, updateChannelToken, registerOnChannel,
+    newChannelUrl, newChannelUsername, newChannelPassword, newChannelIsLogin, addingChannel, addChannelError,
+    addChannel, removeChannel, updateChannelToken, registerOnChannel, loginOnChannel,
     publishPack, openPublish,
+    deleteRemotePack,
   };
 }
