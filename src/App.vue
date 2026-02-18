@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from "vue";
+import { ref, watch, nextTick, onMounted, onUnmounted } from "vue";
 import { useApp } from "./useApp";
 import { useMarket } from "./useMarket";
 
@@ -18,7 +18,6 @@ const {
   sendMessage, regenerate, memoryCompact,
   newChat, switchSession, deleteSession, loadSessions,
   loadArchives, openArchive, closeArchive,
-  exportMemos, importMemos, exportRules, importRules,
   loadMemoPack,
 } = useApp();
 
@@ -114,6 +113,25 @@ function startDrag(idx: number, e: PointerEvent) {
   document.addEventListener("pointermove", onMove);
   document.addEventListener("pointerup", onUp);
 }
+
+// Tab indicator animation
+const tabsRef = ref<HTMLDivElement | null>(null);
+const indicatorStyle = ref({ left: '0px', width: '0px' });
+
+function updateIndicator() {
+  if (!tabsRef.value) return;
+  const activeBtn = tabsRef.value.querySelector('.tab-btn.active') as HTMLElement | null;
+  if (!activeBtn) return;
+  const containerRect = tabsRef.value.getBoundingClientRect();
+  const btnRect = activeBtn.getBoundingClientRect();
+  indicatorStyle.value = {
+    left: `${btnRect.left - containerRect.left + (btnRect.width - 40) / 2}px`,
+    width: '40px',
+  };
+}
+
+watch(currentTab, () => nextTick(updateIndicator));
+onMounted(() => nextTick(updateIndicator));
 </script>
 
 <template>
@@ -574,7 +592,7 @@ function startDrag(idx: number, e: PointerEvent) {
     </div>
 
     <!-- Bottom Tabs -->
-    <div class="bottom-tabs">
+    <div class="bottom-tabs" ref="tabsRef">
       <button
         class="tab-btn"
         :class="{ active: currentTab === 'chat' }"
@@ -603,6 +621,7 @@ function startDrag(idx: number, e: PointerEvent) {
       >
         Settings
       </button>
+      <div class="tab-indicator" :style="indicatorStyle"></div>
     </div>
 
 
@@ -632,10 +651,6 @@ function startDrag(idx: number, e: PointerEvent) {
 
         <div class="memo-section-header">
           <span class="memo-section-title">Rules</span>
-          <div class="memo-section-actions">
-            <button class="header-action-btn" @click="exportRules">Export</button>
-            <button class="header-action-btn" @click="importRules">Import</button>
-          </div>
         </div>
         <div ref="memoListRef" class="memo-list">
           <div
@@ -670,10 +685,6 @@ function startDrag(idx: number, e: PointerEvent) {
 
         <div class="memo-section-header">
           <span class="memo-section-title">Memos</span>
-          <div class="memo-section-actions">
-            <button class="header-action-btn" @click="exportMemos">Export</button>
-            <button class="header-action-btn" @click="importMemos">Import</button>
-          </div>
         </div>
         <div class="memo-list" v-if="memos.length > 0">
           <div v-for="(rule, idx) in memoRules" :key="idx" class="memo-content-item">
