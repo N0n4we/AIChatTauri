@@ -34,16 +34,23 @@ struct Memo {
 }
 
 #[derive(Serialize, Deserialize, Clone)]
+struct CurrentPack {
+    #[serde(default)]
+    system_prompt: String,
+    #[serde(default)]
+    rules: Vec<MemoRule>,
+    #[serde(default)]
+    memos: Vec<Memo>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
 struct RulePack {
     id: String,
     name: String,
     description: String,
-    author: String,
-    version: String,
     system_prompt: String,
     rules: Vec<MemoRule>,
     memos: Vec<Memo>,
-    tags: Vec<String>,
     created_at: String,
     updated_at: String,
 }
@@ -316,11 +323,11 @@ fn get_current_pack_path(app: &AppHandle) -> PathBuf {
 }
 
 #[tauri::command]
-fn load_current_pack(app: AppHandle) -> Option<RulePack> {
+fn load_current_pack(app: AppHandle) -> Option<CurrentPack> {
     let path = get_current_pack_path(&app);
     if path.exists() {
         if let Ok(json) = fs::read_to_string(&path) {
-            if let Ok(pack) = serde_json::from_str::<RulePack>(&json) {
+            if let Ok(pack) = serde_json::from_str::<CurrentPack>(&json) {
                 return Some(pack);
             }
         }
@@ -329,7 +336,7 @@ fn load_current_pack(app: AppHandle) -> Option<RulePack> {
 }
 
 #[tauri::command]
-fn save_current_pack(app: AppHandle, pack: RulePack) -> bool {
+fn save_current_pack(app: AppHandle, pack: CurrentPack) -> bool {
     let path = get_current_pack_path(&app);
     let json = serde_json::to_string_pretty(&pack).unwrap();
     fs::write(path, json).is_ok()
@@ -389,6 +396,16 @@ fn export_pack(app: AppHandle, content: String, filename: String) -> Result<(), 
     }
 }
 
+#[tauri::command]
+fn import_from_memochat(app: AppHandle) -> Result<CurrentPack, String> {
+    let path = get_current_pack_path(&app);
+    if !path.exists() {
+        return Err("No current pack found".to_string());
+    }
+    let json = fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    serde_json::from_str::<CurrentPack>(&json).map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -400,7 +417,7 @@ pub fn run() {
             list_archives, load_archive,
             list_chat_sessions, save_chat_session, load_chat_session, delete_chat_session,
             load_packs, save_pack, delete_pack,
-            export_pack
+            export_pack, import_from_memochat
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

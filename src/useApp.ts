@@ -216,31 +216,13 @@ export function useApp() {
 
   async function saveMemoPack() {
     try {
-      const existing = await invoke<{
-        id: string;
-        name: string;
-        description: string;
-        author: string;
-        version: string;
-        tags: string[];
-        created_at: string;
-      } | null>("load_current_pack");
-
-      const pack = {
-        id: existing?.id || `pack_${Date.now()}`,
-        name: existing?.name || "My Pack",
-        description: existing?.description || "",
-        author: existing?.author || "",
-        version: existing?.version || "1.0.0",
-        system_prompt: systemPrompt.value,
-        rules: memoRules.value.map(m => ({ title: m.title, update_rule: m.updateRule })),
-        memos: memos.value,
-        tags: existing?.tags || [],
-        created_at: existing?.created_at || new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      };
-
-      await invoke("save_current_pack", { pack });
+      await invoke("save_current_pack", {
+        pack: {
+          system_prompt: systemPrompt.value,
+          rules: memoRules.value.map(m => ({ title: m.title, update_rule: m.updateRule })),
+          memos: memos.value,
+        },
+      });
     } catch (e) {
       console.error("Failed to save memo pack:", e);
     }

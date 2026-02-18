@@ -17,11 +17,9 @@ export interface Channel {
 export interface PublishMemoPackReq {
   name: string;
   description: string;
-  version: string;
   system_prompt: string;
   rules: { title: string; update_rule: string }[];
   memos: { title: string; content: string }[];
-  tags: string[];
 }
 
 export interface ListResponse<T> {

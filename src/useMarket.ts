@@ -21,12 +21,9 @@ export interface MemoPack {
   id: string;
   name: string;
   description: string;
-  author: string;
-  version: string;
   systemPrompt: string;
   rules: MemoRule[];
   memos: Memo[];
-  tags: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -46,12 +43,9 @@ function toBackend(pack: MemoPack) {
     id: pack.id,
     name: pack.name,
     description: pack.description,
-    author: pack.author,
-    version: pack.version,
     system_prompt: pack.systemPrompt,
     rules: pack.rules.map(r => ({ title: r.title, update_rule: r.updateRule })),
     memos: pack.memos.map(m => ({ title: m.title, content: m.content })),
-    tags: pack.tags,
     created_at: pack.createdAt,
     updated_at: pack.updatedAt,
   };
@@ -62,12 +56,9 @@ function fromBackend(raw: any): MemoPack {
     id: raw.id,
     name: raw.name,
     description: raw.description,
-    author: raw.author || raw.author_name || "",
-    version: raw.version,
     systemPrompt: raw.system_prompt || "",
     rules: (raw.rules || []).map((r: any) => ({ title: r.title || r.description, updateRule: r.update_rule || r.updateRule })),
     memos: (raw.memos || []).map((m: any) => ({ title: m.title, content: m.content })),
-    tags: raw.tags || [],
     createdAt: raw.created_at || "",
     updatedAt: raw.updated_at || "",
   };
@@ -78,12 +69,10 @@ export function useMarket() {
   const currentView = ref<MarketView>("browse");
   const selectedPack = ref<MemoPack | null>(null);
   const searchQuery = ref("");
-  const filterTag = ref("");
 
-  // Create/Edit form
   const editPack = ref<MemoPack>({
-    id: "", name: "", description: "", author: "", version: "1.0.0",
-    systemPrompt: "", rules: [], memos: [], tags: [], createdAt: "", updatedAt: "",
+    id: "", name: "", description: "",
+    systemPrompt: "", rules: [], memos: [], createdAt: "", updatedAt: "",
   });
 
   // Channels — each channel = one backend server URL + token
@@ -192,7 +181,13 @@ export function useMarket() {
 
   async function installPack(pack: MemoPack) {
     try {
-      await invoke("save_current_pack", { pack: toBackend(pack) });
+      await invoke("save_current_pack", {
+        pack: {
+          system_prompt: pack.systemPrompt,
+          rules: pack.rules.map(r => ({ title: r.title, update_rule: r.updateRule })),
+          memos: pack.memos.map(m => ({ title: m.title, content: m.content })),
+        },
+      });
     } catch (e) {
       console.error("Failed to install pack:", e);
     }
@@ -204,28 +199,16 @@ export function useMarket() {
       const q = searchQuery.value.toLowerCase();
       result = result.filter(p =>
         p.name.toLowerCase().includes(q) ||
-        p.description.toLowerCase().includes(q) ||
-        p.author.toLowerCase().includes(q) ||
-        p.tags.some(t => t.toLowerCase().includes(q))
+        p.description.toLowerCase().includes(q)
       );
-    }
-    if (filterTag.value) {
-      result = result.filter(p => p.tags.includes(filterTag.value));
     }
     return result;
   });
 
-  const allTags = computed(() => {
-    const source = viewMode.value === "remote" ? remotePacks.value : packs.value;
-    const tags = new Set<string>();
-    source.forEach(p => p.tags.forEach(t => tags.add(t)));
-    return Array.from(tags).sort();
-  });
-
   function startCreate() {
     editPack.value = {
-      id: generateId(), name: "", description: "", author: "", version: "1.0.0",
-      systemPrompt: "", rules: [], memos: [], tags: [], createdAt: nowISO(), updatedAt: nowISO(),
+      id: generateId(), name: "", description: "",
+      systemPrompt: "", rules: [], memos: [], createdAt: nowISO(), updatedAt: nowISO(),
     };
     currentView.value = "create";
   }
@@ -249,17 +232,6 @@ export function useMarket() {
 
   function removeMemo(idx: number) {
     editPack.value.memos.splice(idx, 1);
-  }
-
-  function addTag(tag: string) {
-    const t = tag.trim().toLowerCase();
-    if (t && !editPack.value.tags.includes(t)) {
-      editPack.value.tags.push(t);
-    }
-  }
-
-  function removeTag(idx: number) {
-    editPack.value.tags.splice(idx, 1);
   }
 
   async function saveCurrentPack() {
@@ -289,15 +261,25 @@ export function useMarket() {
     }
   }
 
-  // Import from MemoChat (reads current memo-pack.json from MemoChat)
+  // Import from Chat (reads current-pack.json, enters edit mode for user to fill metadata)
   async function importFromMemoChat() {
     try {
-      const pack = await invoke<MemoPack>("import_from_memochat");
-      await savePack(pack);
-      await loadPacks();
+      const raw = await invoke<any>("import_from_memochat");
+      const now = nowISO();
+      editPack.value = {
+        id: generateId(),
+        name: "",
+        description: "",
+        systemPrompt: raw.system_prompt || "",
+        rules: (raw.rules || []).map((r: any) => ({ title: r.title || r.description, updateRule: r.update_rule || r.updateRule || "" })),
+        memos: (raw.memos || []).map((m: any) => ({ title: m.title, content: m.content })),
+        createdAt: now,
+        updatedAt: now,
+      };
+      currentView.value = "create";
     } catch (e) {
-      console.error("Failed to import from MemoChat:", e);
-      alert(`Failed to import from MemoChat: ${e}`);
+      console.error("Failed to import from Chat:", e);
+      alert(`Failed to import from Chat: ${e}`);
     }
   }
 
@@ -321,12 +303,9 @@ export function useMarket() {
             id: generateId(),
             name: file.name.replace(/\.json$/, "").replace(/-/g, " "),
             description: "Imported from MemoChat",
-            author: "",
-            version: "1.0.0",
             systemPrompt: data.systemPrompt || "",
             rules: (data.rules || []).map((r: any) => ({ title: r.title, updateRule: r.updateRule })),
             memos: [],
-            tags: ["imported"],
             createdAt: now,
             updatedAt: now,
           };
@@ -455,11 +434,9 @@ export function useMarket() {
       await apiPublishMemoPack(ch.url, ch.token, {
         name: pack.name,
         description: pack.description,
-        version: pack.version,
         system_prompt: pack.systemPrompt,
         rules: pack.rules.map(r => ({ title: r.title, update_rule: r.updateRule })),
         memos: pack.memos.map(m => ({ title: m.title, content: m.content })),
-        tags: pack.tags,
       });
       publishSuccess.value = `"${pack.name}" published to ${ch.name}!`;
     } catch (e: any) {
@@ -477,11 +454,11 @@ export function useMarket() {
   }
 
   return {
-    packs, currentView, selectedPack, searchQuery, filterTag,
-    filteredPacks, allTags,
+    packs, currentView, selectedPack, searchQuery,
+    filteredPacks,
     editPack,
     loadPacks, savePack, deletePack, installPack,
-    startCreate, startEdit, addRule, removeRule, addMemo, removeMemo, addTag, removeTag,
+    startCreate, startEdit, addRule, removeRule, addMemo, removeMemo,
     saveCurrentPack, viewPack, goBack,
     exportPack, importPack, importFromMemoChat,
     // Local / Remote toggle
