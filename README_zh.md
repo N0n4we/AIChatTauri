@@ -12,14 +12,10 @@
 
 ## 功能
 
-- **兼容 OpenAI API** — 支持任何 OpenAI 兼容的 API 端点，流式输出，支持 Reasoning/Thinking
-- **Memo 记忆系统** — 定义规则（如"记录用户偏好"），对话结束后自动提取信息写入备忘录，下次对话时作为上下文注入
-- **Memory Compact** — 使用指定模型根据聊天记录更新所有备忘录，归档并清空当前对话
-- **MemoPack市场** — 浏览、创建、导入导出、通过远程频道分享MemoPack
-- **聊天记录持久化** — 自动保存，启动时恢复，Compact 时自动归档
-- **导入/导出** — Rules 和 Memos 均可独立导入导出为 JSON
-- **拖拽排序** — Memo 规则支持拖拽调整顺序
-- **Markdown 渲染** — 代码块、表格、列表、链接等
+- **OpenAI Compatible** — 支持任何 OpenAI 兼容的 API 端点，流式输出，支持 Reasoning/Thinking
+- **Memo Compact** — 定义规则，一键整理记忆，下次对话时作为上下文注入
+- **MemoPack Market** — 浏览、创建、导入导出、通过远程频道分享MemoPack
+- **聊天记录** — 自动保存，自动归档，双击聊天框编辑消息
 
 ## 技术栈
 
@@ -46,14 +42,41 @@ pnpm tauri build
 
 | 字段 | 说明 |
 |------|------|
+| Base URL | API 端点 |
 | API Key | API 密钥 |
-| Base URL | API 端点（openai compatible） |
 | Model ID | 聊天模型 |
-| Model ID for Compact | Compact 使用的模型（可选，默认同上） |
+| Model ID for Compact | Compact 使用的模型 |
 | Reasoning | 启用思维链 |
-| Channels | 后端服务器地址，用于浏览和发布规则包 |
 
 在 Memo 面板中设置 System Prompt 和 Memo Rules。
+
+## 项目细节
+
+### 提示词组装规则
+
+```
+system:
+"""
+[memo1]content1
+[memo2]content2
+...
+{system_prompt}
+"""
+
+user:
+"""
+{user_input}
+"""
+
+assistant:
+"""
+{llm_reply}
+"""
+```
+
+### Channel登陆
+
+在Settings页，注册/登陆到channel服务器，即可浏览该服务器的所有MemoPack
 
 ## License
 

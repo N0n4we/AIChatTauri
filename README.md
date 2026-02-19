@@ -12,14 +12,10 @@ A desktop AI chat client with a memory system. Define custom rules to automatica
 
 ## Features
 
-- **OpenAI API Compatible** — Works with any OpenAI-compatible API endpoint, streaming output, supports Reasoning/Thinking
-- **Memo Memory System** — Define rules (e.g. "record user preferences"), automatically extract info after conversations and write to memos, injected as context in future chats
-- **Memory Compact** — Uses a specified model to update all memos based on chat history, then archives and clears the current conversation
-- **MemoPack Market** — Browse, create, import/export, and share rule packs locally or via remote channels
-- **Persistent Chat History** — Auto-saved, restored on startup, auto-archived on Compact
-- **Import/Export** — Rules and Memos can be independently imported/exported as JSON
-- **Drag & Drop Sorting** — Memo rules support drag-and-drop reordering
-- **Markdown Rendering** — Code blocks, tables, lists, links, and more
+- **OpenAI Compatible** — Supports any OpenAI-compatible API endpoint, streaming output, Reasoning/Thinking support
+- **Memo Compact** — Define rules to compact memories with one click, injected as context in the next conversation
+- **MemoPack Market** — Browse, create, import/export, and share MemoPacks via remote channels
+- **Chat History** — Auto-save, auto-archive, double-click chat bubbles to edit messages
 
 ## Tech Stack
 
@@ -46,14 +42,41 @@ Configure in the Settings tab:
 
 | Field | Description |
 |-------|-------------|
-| API Key | Your API key |
-| Base URL | API endpoint (OpenAI compatible) |
+| Base URL | API endpoint |
+| API Key | API key |
 | Model ID | Chat model |
-| Model ID for Compact | Model used for Compact (optional, defaults to chat model) |
+| Model ID for Compact | Model used for Compact |
 | Reasoning | Enable chain-of-thought |
-| Channels | Backend server URLs for browsing and publishing rule packs |
 
-Set up System Prompt and Memo Rules in the Memo panel.
+Set System Prompt and Memo Rules in the Memo panel.
+
+## Details
+
+### Prompt Assembly
+
+```
+system:
+"""
+[memo1]content1
+[memo2]content2
+...
+{system_prompt}
+"""
+
+user:
+"""
+{user_input}
+"""
+
+assistant:
+"""
+{llm_reply}
+"""
+```
+
+### Channel Login
+
+In the Settings page, register/login to a channel server to browse all MemoPacks on that server.
 
 ## License
 
