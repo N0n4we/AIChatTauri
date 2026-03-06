@@ -22,3 +22,13 @@ Thumbs.db
 # Misc
 *.log
 tsconfig.tsbuildinfo
+
+# Electron build output
+electron-dist/
+release/
+
+# AppImage build artifacts
+squashfs-root/
+
+# Package lock (pnpm only)
+package-lock.json
