@@ -1,8 +1,10 @@
 use chrono::Local;
+use base64::Engine;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::fs;
-use std::path::PathBuf;
+use std::io::Cursor;
+use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Manager};
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -53,6 +55,89 @@ struct RulePack {
     memos: Vec<Memo>,
     created_at: String,
     updated_at: String,
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct NativeImageAttachment {
+    name: String,
+    mime_type: String,
+    data_url: String,
+    size: usize,
+}
+
+fn image_dialog_extensions() -> [&'static str; 10] {
+    ["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg", "avif", "heic", "heif"]
+}
+
+fn mime_type_from_path(path: &Path) -> &'static str {
+    match path
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| ext.to_ascii_lowercase())
+        .as_deref()
+    {
+        Some("png") => "image/png",
+        Some("jpg") | Some("jpeg") => "image/jpeg",
+        Some("gif") => "image/gif",
+        Some("webp") => "image/webp",
+        Some("bmp") => "image/bmp",
+        Some("svg") => "image/svg+xml",
+        Some("avif") => "image/avif",
+        Some("heic") => "image/heic",
+        Some("heif") => "image/heif",
+        _ => "application/octet-stream",
+    }
+}
+
+fn file_name_or_default(path: &Path, fallback: &str) -> String {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .filter(|name| !name.is_empty())
+        .unwrap_or(fallback)
+        .to_string()
+}
+
+fn build_data_url(mime_type: &str, bytes: &[u8]) -> String {
+    format!(
+        "data:{};base64,{}",
+        mime_type,
+        base64::engine::general_purpose::STANDARD.encode(bytes)
+    )
+}
+
+fn read_image_attachment(path: &Path) -> Result<NativeImageAttachment, String> {
+    let bytes = fs::read(path).map_err(|e| e.to_string())?;
+    let mime_type = mime_type_from_path(path).to_string();
+
+    Ok(NativeImageAttachment {
+        name: file_name_or_default(path, "image"),
+        size: bytes.len(),
+        data_url: build_data_url(&mime_type, &bytes),
+        mime_type,
+    })
+}
+
+fn encode_png_image(name: String, image: tauri::image::Image<'_>) -> Result<NativeImageAttachment, String> {
+    let mut png_bytes = Cursor::new(Vec::new());
+    {
+        let mut encoder = png::Encoder::new(&mut png_bytes, image.width(), image.height());
+        encoder.set_color(png::ColorType::Rgba);
+        encoder.set_depth(png::BitDepth::Eight);
+
+        let mut writer = encoder.write_header().map_err(|e| e.to_string())?;
+        writer.write_image_data(image.rgba()).map_err(|e| e.to_string())?;
+    }
+
+    let bytes = png_bytes.into_inner();
+    let mime_type = "image/png".to_string();
+
+    Ok(NativeImageAttachment {
+        name,
+        size: bytes.len(),
+        data_url: build_data_url(&mime_type, &bytes),
+        mime_type,
+    })
 }
 
 fn get_config_path(app: &AppHandle) -> PathBuf {
@@ -376,6 +461,51 @@ fn delete_pack(app: AppHandle, id: String) -> bool {
 }
 
 #[tauri::command]
+async fn pick_images(app: AppHandle) -> Result<Vec<NativeImageAttachment>, String> {
+    use tauri_plugin_dialog::DialogExt;
+
+    let (tx, mut rx) = tauri::async_runtime::channel(1);
+
+    app.dialog()
+        .file()
+        .add_filter("Images", &image_dialog_extensions())
+        .pick_files(move |files| {
+            tauri::async_runtime::spawn(async move {
+                let _ = tx.send(files).await;
+            });
+        });
+
+    let Some(files) = rx.recv().await.flatten() else {
+        return Ok(Vec::new());
+    };
+
+    files
+        .into_iter()
+        .map(|file| {
+            let path = file.into_path().map_err(|e| e.to_string())?;
+            read_image_attachment(&path)
+        })
+        .collect()
+}
+
+#[tauri::command]
+async fn read_clipboard_image(app: AppHandle) -> Result<Option<NativeImageAttachment>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri_plugin_clipboard_manager::ClipboardExt;
+
+        let image = match app.clipboard().read_image() {
+            Ok(image) => image,
+            Err(_) => return Ok(None),
+        };
+
+        encode_png_image("clipboard-image.png".to_string(), image)
+            .map(Some)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
 fn export_pack(app: AppHandle, content: String, filename: String) -> Result<(), String> {
     use tauri_plugin_dialog::DialogExt;
 
@@ -410,6 +540,7 @@ fn import_from_memochat(app: AppHandle) -> Result<CurrentPack, String> {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
         .invoke_handler(tauri::generate_handler![
             load_config, save_config,
             load_current_pack, save_current_pack,
@@ -417,6 +548,7 @@ pub fn run() {
             list_archives, load_archive,
             list_chat_sessions, save_chat_session, load_chat_session, delete_chat_session,
             load_packs, save_pack, delete_pack,
+            pick_images, read_clipboard_image,
             export_pack, import_from_memochat
         ])
         .run(tauri::generate_context!())

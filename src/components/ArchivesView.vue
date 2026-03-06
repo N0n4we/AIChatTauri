@@ -46,7 +46,16 @@ function formatDate(iso: string) {
             <summary class="reasoning-summary">Reasoning</summary>
             <div class="reasoning-content">{{ msg.reasoning }}</div>
           </details>
-          <div class="message-content" v-html="msg.html"></div>
+          <div v-if="msg.images?.length" class="message-images">
+            <img
+              v-for="image in msg.images"
+              :key="image.id || image.dataUrl"
+              :src="image.dataUrl"
+              :alt="image.name || 'Archived image'"
+              class="message-image"
+            >
+          </div>
+          <div v-if="msg.content" class="message-content" v-html="msg.html"></div>
         </div>
       </div>
     </div>
@@ -79,6 +88,20 @@ function formatDate(iso: string) {
 .message { display: flex; flex-direction: column; max-width: 80%; }
 .message.user { align-self: flex-end; }
 .message.assistant { align-self: flex-start; }
+.message-images {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.message-image {
+  width: 100%;
+  max-width: 320px;
+  max-height: 280px;
+  border-radius: 14px;
+  object-fit: cover;
+  background: rgba(255, 255, 255, 0.04);
+}
 .message-content {
   padding: 12px 16px; border-radius: 16px;
   word-wrap: break-word; white-space: pre-wrap;

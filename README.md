@@ -13,6 +13,7 @@ A desktop AI chat client with a memory system. Define custom rules to automatica
 ## Features
 
 - **OpenAI Compatible** — Supports any OpenAI-compatible API endpoint, streaming output, Reasoning/Thinking support
+- **Image Input** — Attach, paste, or drop local images and send them to vision-capable chat models
 - **Memo Compact** — Define rules to compact memories with one click, injected as context in the next conversation
 - **MemoPack Market** — Browse, create, import/export, and share MemoPacks via remote channels
 - **Chat History** — Auto-save, auto-archive, double-click chat bubbles to edit messages

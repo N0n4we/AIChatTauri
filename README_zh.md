@@ -13,6 +13,7 @@
 ## 功能
 
 - **OpenAI Compatible** — 支持任何 OpenAI 兼容的 API 端点，流式输出，支持 Reasoning/Thinking
+- **图片输入** — 可选择、粘贴或拖拽本地图片，并发送给支持视觉的聊天模型
 - **Memo Compact** — 定义规则，一键整理记忆，下次对话时作为上下文注入
 - **MemoPack Market** — 浏览、创建、导入导出、通过远程频道分享MemoPack
 - **聊天记录** — 自动保存，自动归档，双击聊天框编辑消息

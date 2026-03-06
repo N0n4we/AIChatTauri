@@ -1,11 +1,27 @@
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from "vue";
 import { invoke } from "@tauri-apps/api/core";
-import { chatCompletion } from "./llm";
+import { chatCompletion, type ChatMessage, type ContentPart } from "./llm";
 
 export interface Message {
   role: "user" | "assistant";
   content: string;
   reasoning?: string;
+  images?: ImageAttachment[];
+}
+
+export interface ImageAttachment {
+  id: string;
+  name: string;
+  mimeType: string;
+  dataUrl: string;
+  size: number;
+}
+
+export interface NativeImageAttachment {
+  name: string;
+  mimeType: string;
+  dataUrl: string;
+  size: number;
 }
 
 export type PanelState = "closed" | "expanding" | "expanded" | "collapsing";
@@ -20,6 +36,11 @@ export interface MemoRule {
 let _ruleId = 0;
 function nextRuleId() {
   return `rule_${Date.now()}_${_ruleId++}`;
+}
+
+let _imageId = 0;
+function nextImageId() {
+  return `image_${Date.now()}_${_imageId++}`;
 }
 
 export interface Memo {
@@ -46,6 +67,7 @@ export function useApp() {
   const currentTab = ref<TabType>("chat");
   const messages = ref<Message[]>([]);
   const input = ref("");
+  const pendingImages = ref<ImageAttachment[]>([]);
   const loading = ref(false);
   const apiKey = ref("");
   const modelId = ref("");
@@ -105,6 +127,106 @@ export function useApp() {
     if (resizeRAF) cancelAnimationFrame(resizeRAF);
     window.removeEventListener("resize", forceRepaint);
   });
+
+  function resetInputHeight() {
+    if (inputRef.value) inputRef.value.style.height = "auto";
+  }
+
+  function resetComposer() {
+    input.value = "";
+    pendingImages.value = [];
+    resetInputHeight();
+  }
+
+  function readFileAsDataUrl(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result === "string") {
+          resolve(reader.result);
+          return;
+        }
+        reject(new Error(`Failed to read image: ${file.name}`));
+      };
+      reader.onerror = () => reject(reader.error || new Error(`Failed to read image: ${file.name}`));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function addPendingImages(files: File[]) {
+    const imageFiles = files.filter(file => file.type.startsWith("image/"));
+    if (imageFiles.length === 0) return;
+
+    const loaded = await Promise.allSettled(
+      imageFiles.map(async (file) => ({
+        id: nextImageId(),
+        name: file.name || "image",
+        mimeType: file.type || "application/octet-stream",
+        dataUrl: await readFileAsDataUrl(file),
+        size: file.size,
+      }))
+    );
+
+    pendingImages.value.push(
+      ...loaded
+        .filter((result): result is PromiseFulfilledResult<ImageAttachment> => result.status === "fulfilled")
+        .map(result => result.value)
+    );
+
+    loaded
+      .filter((result): result is PromiseRejectedResult => result.status === "rejected")
+      .forEach(result => console.error("Failed to load image:", result.reason));
+  }
+
+  function addPendingImageAttachments(images: NativeImageAttachment[]) {
+    if (images.length === 0) return;
+
+    pendingImages.value.push(
+      ...images.map((image) => ({
+        id: nextImageId(),
+        name: image.name,
+        mimeType: image.mimeType,
+        dataUrl: image.dataUrl,
+        size: image.size,
+      }))
+    );
+  }
+
+  function removePendingImage(id: string) {
+    pendingImages.value = pendingImages.value.filter(image => image.id !== id);
+  }
+
+  function summarizeImages(images?: ImageAttachment[]) {
+    if (!images?.length) return "";
+    const names = images.map(image => image.name || "image").join(", ");
+    return `[images: ${names}]`;
+  }
+
+  function summarizeMessage(message: Message) {
+    const text = message.content.trim();
+    const imageSummary = summarizeImages(message.images);
+    if (text && imageSummary) return `${text} ${imageSummary}`;
+    return text || imageSummary;
+  }
+
+  function toChatMessage(message: Message): ChatMessage {
+    if (!message.images?.length) {
+      return { role: message.role, content: message.content };
+    }
+
+    const contentParts: ContentPart[] = [];
+    if (message.content.trim()) {
+      contentParts.push({ type: "text", text: message.content });
+    }
+    contentParts.push(
+      ...message.images.map(image => ({
+        type: "image_url" as const,
+        image_url: { url: image.dataUrl },
+      }))
+    );
+
+    return { role: message.role, content: contentParts };
+  }
 
   function scrollToBottom(smooth = false) {
     if (scrollRAF) return;
@@ -289,7 +411,11 @@ export function useApp() {
   function clearMessages() {
     if (messages.value.length === 0 || clearing.value) return;
     const container = messagesContainerRef.value;
-    if (!container) { messages.value = []; return; }
+    if (!container) {
+      messages.value = [];
+      resetComposer();
+      return;
+    }
     clearingHeight.value = container.clientHeight;
     clearing.value = true;
     nextTick(() => {
@@ -304,6 +430,7 @@ export function useApp() {
     setTimeout(() => {
       messages.value = [];
       clearing.value = false;
+      resetComposer();
     }, 600);
   }
 
@@ -313,7 +440,7 @@ export function useApp() {
 
   function getSessionTitle(): string {
     const firstUser = messages.value.find(m => m.role === "user");
-    if (firstUser) return firstUser.content.slice(0, 30);
+    if (firstUser) return summarizeMessage(firstUser).slice(0, 30) || "[Image]";
     return "New Chat";
   }
 
@@ -347,6 +474,7 @@ export function useApp() {
       const loaded = await invoke<Message[]>("load_chat_session", { id });
       messages.value = loaded;
       currentSessionId.value = id;
+      resetComposer();
     } catch (e) {
       console.error("Failed to load session:", e);
     }
@@ -372,6 +500,7 @@ export function useApp() {
     if (!container || messages.value.length === 0) {
       messages.value = [];
       currentSessionId.value = generateSessionId();
+      resetComposer();
       return;
     }
     clearingHeight.value = container.clientHeight;
@@ -389,6 +518,7 @@ export function useApp() {
       messages.value = [];
       clearing.value = false;
       currentSessionId.value = generateSessionId();
+      resetComposer();
     }, 600);
   }
 
@@ -414,7 +544,7 @@ export function useApp() {
     archiveMessages.value = [];
   }
 
-  function buildSystemMessage(history: { role: string; content: string }[]) {
+  function buildSystemMessage(history: ChatMessage[]) {
     const parts: string[] = [];
     const memosWithContent = memos.value.filter(m => m.content.trim());
     if (memosWithContent.length > 0) {
@@ -561,6 +691,7 @@ export function useApp() {
       html: highlightMarkdown(m.content),
       content: m.content,
       reasoning: m.reasoning || "",
+      images: m.images || [],
     }))
   );
 
@@ -570,16 +701,20 @@ export function useApp() {
       html: highlightMarkdown(m.content),
       content: m.content,
       reasoning: m.reasoning || "",
+      images: m.images || [],
     }))
   );
 
   async function sendMessage() {
-    if (!input.value.trim() || loading.value) return;
+    if ((!input.value.trim() && pendingImages.value.length === 0) || loading.value) return;
 
-    const userMessage: Message = { role: "user", content: input.value };
+    const userMessage: Message = {
+      role: "user",
+      content: input.value,
+      images: pendingImages.value.length > 0 ? [...pendingImages.value] : undefined,
+    };
     messages.value.push(userMessage);
-    input.value = "";
-    if (inputRef.value) inputRef.value.style.height = "auto";
+    resetComposer();
     loading.value = true;
 
     const assistantMessage: Message = { role: "assistant", content: "", reasoning: "" };
@@ -587,10 +722,7 @@ export function useApp() {
     const assistantIndex = messages.value.length - 1;
 
     try {
-      const history: { role: string; content: string }[] = messages.value.slice(0, -1).map((m) => ({
-        role: m.role,
-        content: m.content,
-      }));
+      const history = messages.value.slice(0, -1).map(toChatMessage);
 
       buildSystemMessage(history);
 
@@ -641,10 +773,7 @@ export function useApp() {
     const assistantIndex = messages.value.length - 1;
 
     try {
-      const history: { role: string; content: string }[] = messages.value.slice(0, -1).map((m) => ({
-        role: m.role,
-        content: m.content,
-      }));
+      const history = messages.value.slice(0, -1).map(toChatMessage);
 
       buildSystemMessage(history);
 
@@ -689,7 +818,7 @@ export function useApp() {
     compactTotal.value = memoRules.value.length;
 
     try {
-      const chatHistory = messages.value.map(m => `${m.role}: ${m.content}`).join("\n");
+      const chatHistory = messages.value.map(m => `${m.role}: ${summarizeMessage(m)}`).join("\n");
       const config = { baseUrl: baseUrl.value, apiKey: apiKey.value, modelId: compactModelId.value || modelId.value, reasoningEnabled: compactReasoningEnabled.value };
 
       const tasks = memoRules.value.map(async (rule, idx) => {
@@ -742,6 +871,7 @@ Output ONLY the updated memo content as plain text (no JSON, no wrapping). If th
       }
       messages.value = [];
       clearing.value = false;
+      resetComposer();
     } catch (e) {
       console.error("Memory compact failed:", e);
     } finally {
@@ -752,7 +882,7 @@ Output ONLY the updated memo content as plain text (no JSON, no wrapping). If th
 
   return {
     currentTab,
-    messages, renderedMessages, renderedArchiveMessages, input, loading,
+    messages, renderedMessages, renderedArchiveMessages, input, pendingImages, loading,
     apiKey, modelId, compactModelId, baseUrl, reasoningEnabled, compactReasoningEnabled, systemPrompt,
     messagesEndRef, messagesContainerRef, inputRef,
     memoState, memoContentVisible, memoRules, memos, compacting, compactProgress, compactTotal, clearing, clearingHeight,
@@ -761,7 +891,8 @@ Output ONLY the updated memo content as plain text (no JSON, no wrapping). If th
     memoBtnRef, memoPanelRef, memoTitleRef,
     memoBtnRect, memoTitleRect,
     openMemo, closeMemo, addMemoRule, toggleMemoRule, removeMemoRule, reorderMemoRule,
-    clearMessages, updateMessage,
+    clearMessages, updateMessage, addPendingImages, removePendingImage,
+    addPendingImageAttachments,
     sendMessage, regenerate, memoryCompact,
     newChat, saveCurrentSession, switchSession, deleteSession, loadSessions,
     loadArchives, openArchive, closeArchive,

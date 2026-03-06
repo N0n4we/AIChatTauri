@@ -11,7 +11,7 @@ import MemoPanel from "./components/MemoPanel.vue";
 
 const {
   currentTab,
-  messages, renderedMessages, renderedArchiveMessages, input, loading,
+  messages, renderedMessages, renderedArchiveMessages, input, pendingImages, loading,
   apiKey, modelId, compactModelId, baseUrl, reasoningEnabled, compactReasoningEnabled, systemPrompt,
   messagesEndRef, messagesContainerRef, inputRef,
   memoState, memoContentVisible, memoRules, memos, compacting, compactProgress, compactTotal, clearing, clearingHeight,
@@ -20,7 +20,8 @@ const {
   memoBtnRef, memoPanelRef, memoTitleRef,
   memoBtnRect, memoTitleRect,
   openMemo, closeMemo, addMemoRule, toggleMemoRule, removeMemoRule, reorderMemoRule,
-  clearMessages, updateMessage,
+  clearMessages, updateMessage, addPendingImages, removePendingImage,
+  addPendingImageAttachments,
   sendMessage, regenerate, memoryCompact,
   newChat, switchSession, deleteSession, loadSessions,
   loadArchives, openArchive, closeArchive,
@@ -145,10 +146,14 @@ onUnmounted(() => document.removeEventListener("mousedown", onHistoryClickOutsid
       :messages="messages"
       :renderedMessages="renderedMessages"
       :input="input"
+      :pendingImages="pendingImages"
       :loading="loading"
       :clearing="clearing"
       :clearingHeight="clearingHeight"
       @update:input="input = $event"
+      @selectImages="addPendingImages"
+      @selectNativeImages="addPendingImageAttachments"
+      @removePendingImage="removePendingImage"
       @send="sendMessage"
       @regenerate="regenerate"
       @updateMessage="updateMessage"
