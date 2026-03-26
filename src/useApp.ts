@@ -1,6 +1,7 @@
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from "vue";
-import { invoke } from "@tauri-apps/api/core";
 import { chatCompletion, type ChatMessage, type ContentPart } from "./llm";
+
+const api = window.electronAPI;
 
 export interface Message {
   role: "user" | "assistant";
@@ -258,7 +259,7 @@ export function useApp() {
 
   async function loadConfig() {
     try {
-      const config = await invoke<{ api_key: string; model_id: string; base_url: string; compact_model_id: string; reasoning_enabled: boolean; compact_reasoning_enabled: boolean }>("load_config");
+      const config = await api.loadConfig();
       if (config) {
         apiKey.value = config.api_key;
         if (config.model_id) modelId.value = config.model_id;
@@ -274,16 +275,16 @@ export function useApp() {
 
   async function saveConfig() {
     try {
-      const existingConfig = await invoke<{ channels_json?: string }>("load_config");
+      const existingConfig = await api.loadConfig();
 
-      await invoke("save_config", {
-        apiKey: apiKey.value,
-        modelId: modelId.value,
-        baseUrl: baseUrl.value,
-        compactModelId: compactModelId.value,
-        reasoningEnabled: reasoningEnabled.value,
-        compactReasoningEnabled: compactReasoningEnabled.value,
-        channelsJson: existingConfig?.channels_json || "",
+      await api.saveConfig({
+        api_key: apiKey.value,
+        model_id: modelId.value,
+        base_url: baseUrl.value,
+        compact_model_id: compactModelId.value,
+        reasoning_enabled: reasoningEnabled.value,
+        compact_reasoning_enabled: compactReasoningEnabled.value,
+        channels_json: existingConfig?.channels_json || "",
       });
     } catch (e) {
       console.error("Failed to save config:", e);
@@ -296,7 +297,7 @@ export function useApp() {
 
   async function loadChatHistory() {
     try {
-      const history = await invoke<Message[]>("load_chat_history");
+      const history = await api.loadChatHistory() as Message[];
       if (history && history.length > 0) {
         messages.value = history;
       }
@@ -307,11 +308,7 @@ export function useApp() {
 
   async function loadMemoPack() {
     try {
-      const pack = await invoke<{
-        system_prompt: string;
-        rules: { title: string; update_rule: string }[];
-        memos: { title: string; content: string }[];
-      } | null>("load_current_pack");
+      const pack = await api.loadCurrentPack();
 
       if (pack) {
         if (pack.rules && pack.rules.length > 0) {
@@ -331,12 +328,10 @@ export function useApp() {
 
   async function saveMemoPack() {
     try {
-      await invoke("save_current_pack", {
-        pack: {
-          system_prompt: systemPrompt.value,
-          rules: memoRules.value.map(m => ({ title: m.title, update_rule: m.updateRule })),
-          memos: memos.value,
-        },
+      await api.saveCurrentPack({
+        system_prompt: systemPrompt.value,
+        rules: memoRules.value.map(m => ({ title: m.title, update_rule: m.updateRule })),
+        memos: memos.value,
       });
     } catch (e) {
       console.error("Failed to save memo pack:", e);
@@ -439,7 +434,7 @@ export function useApp() {
 
   async function loadSessions() {
     try {
-      sessions.value = await invoke<ChatSession[]>("list_chat_sessions");
+      sessions.value = await api.listChatSessions() as ChatSession[];
     } catch (e) {
       console.error("Failed to load sessions:", e);
     }
@@ -449,11 +444,7 @@ export function useApp() {
     if (messages.value.length === 0) return;
     if (!currentSessionId.value) currentSessionId.value = generateSessionId();
     try {
-      await invoke("save_chat_session", {
-        id: currentSessionId.value,
-        title: getSessionTitle(),
-        messages: messages.value,
-      });
+      await api.saveChatSession(currentSessionId.value, getSessionTitle(), messages.value);
       await loadSessions();
     } catch (e) {
       console.error("Failed to save session:", e);
@@ -464,7 +455,7 @@ export function useApp() {
     if (id === currentSessionId.value) return;
     await saveCurrentSession();
     try {
-      const loaded = await invoke<Message[]>("load_chat_session", { id });
+      const loaded = await api.loadChatSession(id) as Message[];
       messages.value = loaded;
       currentSessionId.value = id;
       resetComposer();
@@ -475,7 +466,7 @@ export function useApp() {
 
   async function deleteSession(id: string) {
     try {
-      await invoke("delete_chat_session", { id });
+      await api.deleteChatSession(id);
       if (currentSessionId.value === id) {
         currentSessionId.value = null;
         messages.value = [];
@@ -517,7 +508,7 @@ export function useApp() {
 
   async function loadArchives() {
     try {
-      archives.value = await invoke<ArchiveEntry[]>("list_archives");
+      archives.value = await api.listArchives() as ArchiveEntry[];
     } catch (e) {
       console.error("Failed to load archives:", e);
     }
@@ -525,7 +516,7 @@ export function useApp() {
 
   async function openArchive(filename: string) {
     try {
-      archiveMessages.value = await invoke<Message[]>("load_archive", { filename });
+      archiveMessages.value = await api.loadArchive(filename) as Message[];
       selectedArchive.value = filename;
     } catch (e) {
       console.error("Failed to load archive:", e);
@@ -554,7 +545,7 @@ export function useApp() {
   function triggerSaveChat() {
     if (saveChatTimeout) clearTimeout(saveChatTimeout);
     saveChatTimeout = setTimeout(() => {
-      invoke("save_chat_history", { messages: messages.value }).catch(e =>
+      api.saveChatHistory(messages.value).catch(e =>
         console.error("Failed to save chat history:", e)
       );
     }, 500);
@@ -854,7 +845,7 @@ Output ONLY the updated memo content as plain text (no JSON, no wrapping). If th
 
       memos.value = await Promise.all(tasks);
 
-      await invoke("archive_chat_history", { messages: messages.value }).catch(e =>
+      await api.archiveChatHistory(messages.value).catch(e =>
         console.error("Failed to archive chat history:", e)
       );
 

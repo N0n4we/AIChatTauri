@@ -1,5 +1,4 @@
 import { ref, computed, onMounted, watch } from "vue";
-import { invoke } from "@tauri-apps/api/core";
 import {
   type Channel,
   fetchServerInfo, registerOnServer, loginOnServer,
@@ -108,10 +107,7 @@ export function useMarket() {
 
   async function loadConfig() {
     try {
-      const config = await invoke<{
-        api_key: string; model_id: string; base_url: string;
-        reasoning_enabled: boolean; channels_json: string;
-      }>("load_config");
+      const config = await window.electronAPI.loadConfig();
       if (config) {
         if (config.channels_json) {
           try {
@@ -130,23 +126,16 @@ export function useMarket() {
   async function saveConfig() {
     try {
       // Load existing config to preserve other fields
-      const existingConfig = await invoke<{
-        api_key?: string;
-        model_id?: string;
-        base_url?: string;
-        compact_model_id?: string;
-        reasoning_enabled?: boolean;
-        compact_reasoning_enabled?: boolean;
-      }>("load_config");
+      const existingConfig = await window.electronAPI.loadConfig();
 
-      await invoke("save_config", {
-        apiKey: existingConfig?.api_key || "",
-        modelId: existingConfig?.model_id || "",
-        baseUrl: existingConfig?.base_url || "",
-        compactModelId: existingConfig?.compact_model_id || "",
-        reasoningEnabled: existingConfig?.reasoning_enabled || false,
-        compactReasoningEnabled: existingConfig?.compact_reasoning_enabled || false,
-        channelsJson: JSON.stringify(channels.value),
+      await window.electronAPI.saveConfig({
+        api_key: existingConfig?.api_key || "",
+        model_id: existingConfig?.model_id || "",
+        base_url: existingConfig?.base_url || "",
+        compact_model_id: existingConfig?.compact_model_id || "",
+        reasoning_enabled: existingConfig?.reasoning_enabled || false,
+        compact_reasoning_enabled: existingConfig?.compact_reasoning_enabled || false,
+        channels_json: JSON.stringify(channels.value),
       });
     } catch (e) {
       console.error("Failed to save config:", e);
@@ -162,7 +151,7 @@ export function useMarket() {
 
   async function loadPacks() {
     try {
-      const raw = await invoke<any[]>("load_packs");
+      const raw = await window.electronAPI.loadPacks() as any[];
       packs.value = (raw || []).map(fromBackend);
     } catch (e) {
       console.error("Failed to load packs:", e);
@@ -171,7 +160,7 @@ export function useMarket() {
 
   async function savePack(pack: MemoPack) {
     try {
-      await invoke("save_pack", { pack: toBackend(pack) });
+      await window.electronAPI.savePack(toBackend(pack));
       await loadPacks();
     } catch (e) {
       console.error("Failed to save pack:", e);
@@ -180,7 +169,7 @@ export function useMarket() {
 
   async function deletePack(id: string) {
     try {
-      await invoke("delete_pack", { id });
+      await window.electronAPI.deletePack(id);
       if (selectedPack.value?.id === id) {
         selectedPack.value = null;
         currentView.value = "browse";
@@ -193,12 +182,10 @@ export function useMarket() {
 
   async function installPack(pack: MemoPack) {
     try {
-      await invoke("save_current_pack", {
-        pack: {
-          system_prompt: pack.systemPrompt,
-          rules: pack.rules.map(r => ({ title: r.title, update_rule: r.updateRule })),
-          memos: pack.memos.map(m => ({ title: m.title, content: m.content })),
-        },
+      await window.electronAPI.saveCurrentPack({
+        system_prompt: pack.systemPrompt,
+        rules: pack.rules.map(r => ({ title: r.title, update_rule: r.updateRule })),
+        memos: pack.memos.map(m => ({ title: m.title, content: m.content })),
       });
     } catch (e) {
       console.error("Failed to install pack:", e);
@@ -270,7 +257,7 @@ export function useMarket() {
     try {
       const json = JSON.stringify(toBackend(pack), null, 2);
       const filename = `${pack.name.replace(/\s+/g, "-").toLowerCase() || "pack"}.memomarket.json`;
-      await invoke("export_pack", { content: json, filename });
+      await window.electronAPI.exportPack(json, filename);
     } catch (e) {
       console.error("Failed to export pack:", e);
     }
@@ -279,7 +266,7 @@ export function useMarket() {
   // Import from Chat (reads current-pack.json, enters edit mode for user to fill metadata)
   async function importFromMemoChat() {
     try {
-      const raw = await invoke<any>("import_from_memochat");
+      const raw = await window.electronAPI.importFromMemochat() as any;
       const now = nowISO();
       editPack.value = {
         id: generateId(),

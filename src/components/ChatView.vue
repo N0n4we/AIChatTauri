@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { invoke } from "@tauri-apps/api/core";
 import { computed, inject, onMounted, onUnmounted, ref, type Ref } from "vue";
 
 const props = defineProps<{
@@ -27,7 +26,7 @@ const messagesContainerRef = inject<Ref<HTMLElement | null>>("messagesContainerR
 const inputRef = inject<Ref<HTMLTextAreaElement | null>>("inputRef")!;
 const imageInputRef = ref<HTMLInputElement | null>(null);
 const imagePickerAccept = ".png,.jpg,.jpeg,.gif,.webp,.bmp,.svg,.avif,.heic,.heif,image/*";
-const isTauriRuntime = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+const isElectronRuntime = typeof window !== "undefined" && "electronAPI" in window;
 const previewImage = ref<{ name: string; dataUrl: string } | null>(null);
 
 type NativeImageAttachment = {
@@ -80,9 +79,9 @@ function clipboardMightContainImage(dataTransfer: DataTransfer | null) {
 async function openImagePicker() {
   if (props.loading) return;
 
-  if (isTauriRuntime) {
+  if (isElectronRuntime) {
     try {
-      const images = await invoke<NativeImageAttachment[]>("pick_images");
+      const images = await window.electronAPI.pickImages();
       emitNativeImages(images || []);
       return;
     } catch (error) {
@@ -138,7 +137,7 @@ async function handlePaste(event: ClipboardEvent) {
     return;
   }
 
-  if (pastedText || !isTauriRuntime) {
+  if (pastedText || !isElectronRuntime) {
     return;
   }
 
@@ -147,7 +146,7 @@ async function handlePaste(event: ClipboardEvent) {
   }
 
   try {
-    const image = await invoke<NativeImageAttachment | null>("read_clipboard_image");
+    const image = await window.electronAPI.readClipboardImage();
     if (image) {
       emitNativeImages([image]);
       event.preventDefault();

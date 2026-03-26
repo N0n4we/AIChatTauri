@@ -2,22 +2,46 @@
   "name": "memochat",
   "private": true,
   "version": "0.1.2",
+  "author": { "name": "memochat", "email": "memochat@example.com" },
   "type": "module",
+  "main": "electron-dist/main.js",
   "scripts": {
-    "dev": "vite",
-    "build": "vue-tsc -b && vite build",
+    "dev": "concurrently \"vite\" \"npm run electron:dev\"",
+    "electron:dev": "tsc -p electron/tsconfig.json && electron . --dev",
+    "build": "vue-tsc -b && vite build && tsc -p electron/tsconfig.json",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "package": "npm run build && electron-builder"
   },
   "dependencies": {
-    "vue": "^3.4.0",
-    "@tauri-apps/api": "^2.0.0"
+    "vue": "^3.4.0"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^6.0.0",
-    "@tauri-apps/cli": "^2.0.0",
+    "concurrently": "^9.0.0",
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0",
     "typescript": "~5.8.3",
     "vite": "^7.0.4",
     "vue-tsc": "^3.2.4"
+  },
+  "build": {
+    "appId": "memochat",
+    "productName": "MemoChat",
+    "files": [
+      "dist/**/*",
+      "electron-dist/**/*"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "linux": {
+      "target": ["AppImage", "deb"]
+    },
+    "mac": {
+      "target": ["dmg"]
+    },
+    "win": {
+      "target": ["nsis"]
+    }
   }
 }

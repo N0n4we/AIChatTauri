@@ -112,8 +112,8 @@ onUnmounted(() => document.removeEventListener("mousedown", onHistoryClickOutsid
 
 <template>
   <main class="chat-container">
-    <header class="chat-header" data-tauri-drag-region>
-      <h1 data-tauri-drag-region>MemoChat</h1>
+    <header class="chat-header">
+      <h1>MemoChat</h1>
       <div class="header-actions">
         <button class="clear-btn" @click="newChat" :disabled="messages.length === 0 && !currentSessionId">+</button>
         <div ref="historyDropdownRef" class="history-dropdown-wrapper">
