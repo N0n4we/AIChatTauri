@@ -243,25 +243,18 @@ export function useApp() {
     });
   }
 
-  watch(messages, (newVal, oldVal) => {
-    if (newVal.length !== oldVal?.length || loading.value) {
+  watch(() => ({ len: messages.value.length, loading: loading.value }), (newVal, oldVal) => {
+    if (newVal.len !== oldVal?.len || newVal.loading) {
       nextTick(() => {
-        const isNewMessage = newVal.length !== oldVal?.length;
-        scrollToBottom(isNewMessage && !loading.value);
+        const isNewMessage = newVal.len !== oldVal?.len;
+        scrollToBottom(isNewMessage && !newVal.loading);
       });
     }
-  }, { deep: true });
+  });
 
   let saveChatTimeout: ReturnType<typeof setTimeout> | null = null;
 
-  watch(messages, () => {
-    if (saveChatTimeout) clearTimeout(saveChatTimeout);
-    saveChatTimeout = setTimeout(() => {
-      invoke("save_chat_history", { messages: messages.value }).catch(e =>
-        console.error("Failed to save chat history:", e)
-      );
-    }, 500);
-  }, { deep: true });
+  watch(() => messages.value.length, triggerSaveChat);
 
   async function loadConfig() {
     try {
@@ -558,9 +551,19 @@ export function useApp() {
     }
   }
 
+  function triggerSaveChat() {
+    if (saveChatTimeout) clearTimeout(saveChatTimeout);
+    saveChatTimeout = setTimeout(() => {
+      invoke("save_chat_history", { messages: messages.value }).catch(e =>
+        console.error("Failed to save chat history:", e)
+      );
+    }, 500);
+  }
+
   function updateMessage(idx: number, content: string) {
     if (idx >= 0 && idx < messages.value.length) {
       messages.value[idx] = { ...messages.value[idx], content };
+      triggerSaveChat();
     }
   }
 
